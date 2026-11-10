@@ -1,6 +1,6 @@
 # Candidate profile
 
-Copy this into the app's Settings → Your profile (it's saved as profile.md in your data folder).
+Fill this in under Settings → Your profile in the app (it's saved as profile.md in your data folder).
 The AI uses only what's written here to score jobs and draft cover letters, so keep it accurate.
 
 ## Preferences

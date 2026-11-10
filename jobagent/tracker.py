@@ -7,6 +7,31 @@ import threading
 
 from . import rules
 
+PROFILE_TEMPLATE = """# Candidate profile
+
+Fill this in under Settings → Your profile in the app (it's saved as profile.md in your data folder).
+The AI uses only what's written here to score jobs and draft cover letters, so keep it accurate.
+
+## Preferences
+- **Target:** entry-level, associate and mid-level AI roles in the USA
+- **Work setup:** remote preferred
+- **Visa sponsorship needed:** yes / no
+- **Salary:** your minimum
+- **Strong-fit areas:** the kinds of roles where your background helps most
+
+## Resume summary
+**Your Name**: one-line headline
+
+### Experience
+- Title, Company (dates)
+
+### Skills
+- Group: skill, skill, skill
+
+### Gaps to be honest about in cover letters
+- Skills you don't have yet, so drafts never claim them
+"""
+
 STATUSES = ["New", "Interested", "Applied", "Interview", "Offer", "Rejected", "Skip"]
 USER_FIELDS = {"Status": "status", "Applied on": "applied_on", "Notes": "notes"}
 _lock = threading.RLock()
@@ -26,6 +51,9 @@ class Store:
         self.log_file = os.path.join(self.runs, "run_log.csv")
         self.xlsx = os.path.join(data_dir, "jobs_tracker.xlsx")
         self.profile_file = os.path.join(data_dir, "profile.md")
+        if not os.path.exists(self.profile_file):  # first run: start from a template the user fills in
+            with open(self.profile_file, "w", encoding="utf-8") as f:
+                f.write(PROFILE_TEMPLATE)
 
     # ------------------------------------------------------------ json helpers
     @staticmethod

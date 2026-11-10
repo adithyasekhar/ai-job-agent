@@ -39,6 +39,15 @@ def main():
          "--collect-submodules", "webview",
          os.path.join(HERE, "main.py")])
 
+    if "--zip" in sys.argv:
+        sys.path.insert(0, HERE)
+        from jobagent.settings import APP_VERSION
+        base = os.path.join(BUILD, f"AI-Job-Agent-v{APP_VERSION}-windows")
+        shutil.make_archive(base, "zip", os.path.join(BUILD, "dist"), "AI Job Agent")
+        print("Release zip:", base + ".zip")
+    if "--no-install" in sys.argv:
+        return
+
     # Stop a running copy before replacing files.
     subprocess.run(["taskkill", "/IM", "AI Job Agent.exe", "/F"], capture_output=True)
     if os.path.isdir(INSTALL):

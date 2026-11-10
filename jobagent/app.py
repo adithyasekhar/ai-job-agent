@@ -100,7 +100,8 @@ class Api:
             "schedule_enabled": s["schedule_enabled"], "interval": s["interval_minutes"],
             "has_anthropic": bool(cfg.get_secret("anthropic_api_key")),
             "has_apify": bool(cfg.get_secret("apify_token")), "model": s["model"],
-            "threshold": s["alert_threshold"], "ai_label": self._ai_label(),
+            "threshold": s["alert_threshold"], "ai_label": self._ai_label(), "version": cfg.APP_VERSION,
+            "profile_blank": "**Your Name**" in self._store().profile(),
         }
 
     def _ai_label(self):

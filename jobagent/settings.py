@@ -5,6 +5,7 @@ import os
 import keyring
 
 APP_NAME = "AI Job Agent"
+APP_VERSION = "1.0.0"
 CONFIG_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), APP_NAME)
 CONFIG_FILE = os.path.join(CONFIG_DIR, "settings.json")
 DEFAULT_DATA_DIR = os.path.join(os.path.expanduser("~"), "OneDrive", "Documents", APP_NAME)

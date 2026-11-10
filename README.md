@@ -4,6 +4,17 @@ A Windows desktop app that finds new entry- to mid-level AI jobs in the USA ever
 against your resume, flags remote work and visa sponsorship, drafts cover letters and outreach notes, and
 tracks your applications. It runs in the background from the system tray.
 
+## Download
+1. Go to [Releases](../../releases/latest) and download `AI-Job-Agent-v1.0.0-windows.zip`.
+2. Unzip it anywhere, for example into `Documents`.
+3. Open the `AI Job Agent` folder and double-click **AI Job Agent.exe**.
+   Windows may show "Windows protected your PC" because the app isn't code-signed: click **More info → Run anyway**.
+4. In the app, open **Settings**: fill in **Your profile** (your resume summary) and pick an AI option.
+   For free, private scoring install [Ollama](https://ollama.com) and run `ollama pull gemma4`.
+
+Requires Windows 10 or 11 (64-bit) with the Microsoft Edge WebView2 runtime, which Windows 11 includes.
+The app stays in the system tray when you close the window; right-click the tray icon → Quit to stop it.
+
 ## What it does
 - **Finds jobs** from free sources: [AI Dev Jobs](https://aidevboard.com), [Remote OK](https://remoteok.com),
   and 65 company career boards (Greenhouse, Lever, Ashby: Anthropic, OpenAI, Databricks, Scale AI, Samsara and
