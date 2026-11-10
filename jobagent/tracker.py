@@ -203,6 +203,7 @@ class Store:
                     "hint_work_setup": rules.work_setup(title, j.get("location") or "", desc),
                     "hint_sponsorship": sp, "hint_evidence": ev,
                     "known_filer": "Yes" if rules.known_filer(company) else "",
+                    "h1b": rules.h1b_label(company),
                     "poster_name": j.get("posterFullName") or "", "poster_url": j.get("posterProfileUrl") or "",
                     "description": trimmed,
                 })
@@ -224,6 +225,7 @@ class Store:
                 rec = {k: base[k] for k in ("id", "source", "title", "company", "location", "posted",
                                              "salary", "type", "level", "url", "known_filer")}
                 rec["poster_name"], rec["poster_url"] = base.get("poster_name", ""), base.get("poster_url", "")
+                rec["h1b"] = base.get("h1b", "")
                 rec.update({
                     "fit": jd.get("fit"), "fit_reason": jd.get("fit_reason", "") or ("" if jd else "Not scored yet"),
                     "work_setup": jd.get("work_setup") or base["hint_work_setup"],
@@ -354,6 +356,6 @@ def outlook(r):
         return "No"
     if sp == "Yes":
         return "Good"
-    if sp == "Maybe" or r.get("known_filer") == "Yes":
+    if sp == "Maybe" or r.get("known_filer") == "Yes" or rules.known_filer(r.get("company", "")):
         return "Possible"
     return "Unknown"

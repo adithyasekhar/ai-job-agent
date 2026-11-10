@@ -106,7 +106,7 @@ textarea.field{width:100%;min-height:90px;resize:vertical}
 /* activity */
 .log{font:12.5px/1.6 "Cascadia Mono",Consolas,monospace;white-space:pre-wrap;padding:14px 16px;max-height:280px;overflow:auto;color:var(--muted)}
 /* settings */
-.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr));gap:16px}
 .sect{padding:18px 20px}
 .sect h3{margin:0 0 4px;font-size:15px}
 .sect .hint{color:var(--muted);font-size:12.5px;margin:0 0 12px}
@@ -343,7 +343,8 @@ async function openJob(id){
         <div>Fit</div><div><span class="fit ${fitCls(j.fit)}">${j.fit ?? "–"}</span></div>
         <div>Status</div><div><select class="status-sel" id="d-status">${STATUSES.map(s=>`<option ${s===(j.status||"New")?"selected":""}>${s}</option>`).join("")}</select></div>
         <div>Work setup</div><div>${setupPill(j.work_setup)}</div>
-        <div>Sponsorship</div><div>${spPill(j.outlook)} ${j.known_filer==="Yes"?'<span class="t2">· known H-1B filer</span>':""}</div>
+        <div>Sponsorship</div><div>${spPill(j.outlook)}</div>
+        <div>H-1B record</div><div>${j.h1b ? esc(j.h1b) + ' <span class="t2">· USCIS</span>' : '<span class="t2">No USCIS record found for this company name</span>'}</div>
         <div>Salary</div><div>${esc(j.salary||"Not listed")}</div>
         <div>Level / type</div><div>${esc([j.level,j.type].filter(Boolean).join(" · ")||"—")}</div>
         <div>Posted</div><div>${esc(j.posted||"—")} <span class="t2">· found ${esc(j.found||"")}</span></div>
@@ -439,14 +440,42 @@ async function renderSettings(){
       <div class="frow"><label></label><span class="msg" id="m-ant"></span></div>
     </div>
     <div class="card sect"><h3>Job sources</h3>
-      <p class="hint">AI Dev Jobs, Remote OK and company career boards are free. LinkedIn adds the most jobs but needs an Apify token (paid per result).</p>
-      <label class="check"><input type="checkbox" id="use_boards" ${s.use_boards?"checked":""}> Company career boards (Greenhouse, Lever, Ashby), checked every 3 hours</label>
-      <textarea class="field" id="boards_text" style="min-height:70px;font-size:12px" title="One per line or space-separated, like greenhouse:anthropic, lever:palantir, ashby:openai">${esc(s.boards_text)}</textarea>
-      <div class="t2" style="margin-bottom:10px">Add a company as greenhouse:name, lever:name or ashby:name (the name in its jobs-page URL).</div>
+      <p class="hint">Untick a source to stop using it. Sources marked "key" only run once their key is saved below.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px">${s.source_names.map(n => {
+        const keyed = {"Adzuna":"adzuna_app_key","Jooble":"jooble_api_key","JSearch":"jsearch_api_key","Job-alert emails":"gmail_app_password"}[n];
+        const tag = keyed ? (s.secrets_set[keyed] ? ' <span class="pill good">key saved</span>' : ' <span class="pill">key</span>') : ' <span class="pill good">free</span>';
+        return `<label class="check"><input type="checkbox" class="src-on" value="${esc(n)}" ${(s.sources_off||[]).includes(n)?"":"checked"}> ${esc(n)}${tag}</label>`; }).join("")}</div>
+      <label class="check"><input type="checkbox" id="use_boards" ${s.use_boards?"checked":""}> Company career boards list (Greenhouse, Lever, Ashby), checked every 3 hours</label>
+      <textarea class="field" id="boards_text" style="min-height:60px;font-size:12px" title="Space-separated, like greenhouse:anthropic lever:palantir ashby:openai">${esc(s.boards_text)}</textarea>
+      <div class="t2" style="margin-bottom:8px">Add a company as greenhouse:name, lever:name or ashby:name (the name in its jobs-page URL).</div>
+      <div class="label">Workday career sites (big employers, checked every 6 hours)</div>
+      <textarea class="field" id="workday_text" style="min-height:60px;font-size:12px;margin-top:6px" title="host/site from the careers URL, e.g. nvidia.wd5/NVIDIAExternalCareerSite">${esc(s.workday_text)}</textarea>
+      <div class="t2" style="margin-bottom:10px">From a careers URL like nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite, add nvidia.wd5/NVIDIAExternalCareerSite.</div>
       <div class="frow"><label>Apify token</label><input class="field" id="k-apify" type="password" placeholder="${s.apify_masked ? "Saved: "+esc(s.apify_masked) : "apify_api_…"}"></div>
       <div class="frow"><label></label><button class="btn small" id="t-apify">Test</button>${s.apify_masked?'<button class="btn small danger" id="x-apify">Remove</button>':""}<span class="msg" id="m-apify"></span></div>
       <label class="check"><input type="checkbox" id="use_linkedin" ${s.use_linkedin?"checked":""}> Search LinkedIn when a token is saved</label>
       <div class="frow"><label>LinkedIn spend cap per run</label><select class="field" id="cap">${[0.05,0.1,0.2,0.5,1].map(v=>opt(v,s.apify_cap_usd,"$"+v.toFixed(2))).join("")}</select></div>
+    </div>
+    <div class="card sect"><h3>Free-key job search APIs</h3>
+      <p class="hint">Sign up free, then paste the keys here. They widen the search to most US job boards.</p>
+      <div class="label">Adzuna (developer.adzuna.com)</div>
+      <div class="frow"><label>App ID</label><input class="field" id="k-adzid" type="password" placeholder="${s.secrets_set.adzuna_app_id ? "Saved: "+esc(s.adzuna_id_masked) : "app_id"}"></div>
+      <div class="frow"><label>App key</label><input class="field" id="k-adzkey" type="password" placeholder="${s.secrets_set.adzuna_app_key ? "Saved" : "app_key"}"><button class="btn small" id="t-adz">Test</button></div>
+      <div class="frow"><label></label><span class="msg" id="m-adz"></span></div>
+      <div class="label">Jooble (jooble.org/api/about)</div>
+      <div class="frow"><label>API key</label><input class="field" id="k-jooble" type="password" placeholder="${s.secrets_set.jooble_api_key ? "Saved" : "key"}"><button class="btn small" id="t-jooble">Test</button></div>
+      <div class="frow"><label></label><span class="msg" id="m-jooble"></span></div>
+      <div class="label">JSearch: Google Jobs, includes LinkedIn and Indeed postings (rapidapi.com, free plan)</div>
+      <div class="frow"><label>RapidAPI key</label><input class="field" id="k-jsearch" type="password" placeholder="${s.secrets_set.jsearch_api_key ? "Saved" : "key"}"><button class="btn small" id="t-jsearch">Test</button></div>
+      <div class="frow"><label></label><span class="msg" id="m-jsearch"></span></div>
+      <div class="t2">JSearch's free plan is about 200 searches a month, so the app uses it once a day.</div>
+    </div>
+    <div class="card sect"><h3>Job-alert emails (LinkedIn, Indeed, Glassdoor, ZipRecruiter)</h3>
+      <p class="hint">Create job alerts on those sites as usual. The app reads the alert emails from Gmail (read-only: it never marks, moves, deletes or sends mail) and adds the jobs.</p>
+      <div class="frow"><label>Gmail address</label><input class="field" id="gmail_address" value="${esc(s.gmail_address||"")}" placeholder="you@gmail.com"></div>
+      <div class="frow"><label>Gmail app password</label><input class="field" id="k-gmail" type="password" placeholder="${s.secrets_set.gmail_app_password ? "Saved" : "16-character app password"}"><button class="btn small" id="t-gmail">Test</button></div>
+      <div class="frow"><label></label><span class="msg" id="m-gmail"></span></div>
+      <div class="t2">Get an app password at myaccount.google.com/apppasswords (needs 2-Step Verification). Don't use your normal Gmail password.</div>
     </div>
     <div class="card sect"><h3>Schedule</h3>
       <p class="hint">Runs happen in the background while the app is open or in the tray.</p>
@@ -481,6 +510,11 @@ async function renderSettings(){
   $("#t-gem").onclick = () => testAi("gemini", "#m-gem", $("#k-gem").value.trim(), $("#gemini_model"));
   $("#t-ant").onclick = () => testAi("claude", "#m-ant", $("#k-ant").value.trim(), null);
   if ($("#x-gem")) $("#x-gem").onclick = async () => { await api.save_settings({clear_gemini:true}); toast("Gemini key removed"); state = await api.get_state(); renderSettings(); };
+  const testSrc = async (name, msgId, a, b) => { $(msgId).textContent="Testing…"; $(msgId).className="msg"; msg(msgId, await api.test_source(name, a, b)); };
+  $("#t-adz").onclick = () => testSrc("adzuna", "#m-adz", $("#k-adzid").value.trim(), $("#k-adzkey").value.trim());
+  $("#t-jooble").onclick = () => testSrc("jooble", "#m-jooble", $("#k-jooble").value.trim());
+  $("#t-jsearch").onclick = () => testSrc("jsearch", "#m-jsearch", $("#k-jsearch").value.trim());
+  $("#t-gmail").onclick = () => testSrc("gmail", "#m-gmail", $("#gmail_address").value.trim(), $("#k-gmail").value.trim());
   $("#t-apify").onclick = async () => { $("#m-apify").textContent="Testing…"; $("#m-apify").className="msg"; msg("#m-apify", await api.test_apify($("#k-apify").value.trim())); };
   if ($("#x-ant")) $("#x-ant").onclick = async () => { await api.save_settings({clear_anthropic:true}); toast("Anthropic key removed"); state = await api.get_state(); renderSettings(); };
   if ($("#x-apify")) $("#x-apify").onclick = async () => { await api.save_settings({clear_apify:true}); toast("Apify token removed"); state = await api.get_state(); renderSettings(); };
@@ -489,6 +523,11 @@ async function renderSettings(){
       anthropic_api_key: $("#k-ant").value.trim(), apify_token: $("#k-apify").value.trim(), model: $("#model").value,
       gemini_api_key: $("#k-gem").value.trim(), gemini_model: $("#gemini_model").value, ollama_model: $("#ollama_model").value,
       ai_provider: $("#ai_provider").value, use_boards: $("#use_boards").checked, boards_text: $("#boards_text").value,
+      workday_text: $("#workday_text").value, gmail_address: $("#gmail_address").value.trim(),
+      sources_off: [...document.querySelectorAll(".src-on")].filter(c => !c.checked).map(c => c.value),
+      adzuna_app_id: $("#k-adzid").value.trim(), adzuna_app_key: $("#k-adzkey").value.trim(),
+      jooble_api_key: $("#k-jooble").value.trim(), jsearch_api_key: $("#k-jsearch").value.trim(),
+      gmail_app_password: $("#k-gmail").value.trim(),
       use_linkedin: $("#use_linkedin").checked, apify_cap_usd: +$("#cap").value, schedule_enabled: $("#schedule_enabled").checked,
       interval_minutes: +$("#interval").value, start_with_windows: $("#start_with_windows").checked,
       alert_threshold: +$("#alert_threshold").value, max_drafts_per_run: +$("#max_drafts_per_run").value,

@@ -5,7 +5,7 @@ import os
 import keyring
 
 APP_NAME = "AI Job Agent"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 CONFIG_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), APP_NAME)
 CONFIG_FILE = os.path.join(CONFIG_DIR, "settings.json")
 DEFAULT_DATA_DIR = os.path.join(os.path.expanduser("~"), "OneDrive", "Documents", APP_NAME)
@@ -30,6 +30,9 @@ DEFAULTS = {
     "model": "claude-opus-5-5",
     "use_boards": True,
     "boards": [],
+    "workday_sites": [],
+    "sources_off": [],
+    "gmail_address": "",
     "alert_threshold": 8,
     "max_drafts_per_run": 3,
     "needs_sponsorship": True,
@@ -37,7 +40,8 @@ DEFAULTS = {
     "start_with_windows": False,
 }
 
-KEYS = ("anthropic_api_key", "gemini_api_key", "apify_token")
+KEYS = ("anthropic_api_key", "gemini_api_key", "apify_token", "adzuna_app_id", "adzuna_app_key", "jooble_api_key",
+        "jsearch_api_key", "gmail_app_password")
 
 
 def load():

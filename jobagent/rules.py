@@ -8,14 +8,14 @@ import re
 AI_TITLE = re.compile(
     r"\b(ai|a\.i\.|artificial intelligence|machine learning|ml|mlops|llm|genai|gen ai|generative|"
     r"nlp|natural language|computer vision|deep learning|data scien\w*|applied scien\w*|"
-    r"research scien\w*|prompt|agentic|agents?|neural|perception|ai/ml|ml/ai|copilot)\b", re.I)
+    r"research scien\w*|prompt engineer\w*|agentic|ai agents?|agent (?:engineer|developer|builder)|neural|perception|ai/ml|ml/ai|copilot)\b", re.I)
 AI_DESC = re.compile(
     r"\b(machine learning|deep learning|llms?|large language models?|generative ai|pytorch|tensorflow|"
     r"computer vision|nlp|natural language processing|neural networks?|rag|transformers?|agentic)\b", re.I)
 # Mid-level is wanted, so "II" stays in. Clearly senior titles are dropped.
 SENIOR = re.compile(
     r"\b(senior|sr\.?|staff|principal|lead|manager|director|head of|vp|vice president|"
-    r"architect|distinguished|iii|iv|level 3|l5|l6|l7)\b", re.I)
+    r"architect|distinguished|pmts|lmts|smts|principal member|iii|iv|level 3|l5|l6|l7)\b", re.I)
 
 NO_SPONSOR = [
     r"(unable|not able|cannot|can ?not|will not|won'?t|do(es)? not|don'?t|are not able to|is not able to|not in a position to)\s+(to\s+)?(currently\s+)?(offer|provide|support|sponsor|consider)[^.\n]{0,60}sponsor",
@@ -153,3 +153,63 @@ def is_relevant(title, desc):
 def wanted_title(title):
     """Quick title-only check used before fetching full postings."""
     return (bool(AI_TITLE.search(title)) or bool(PROFILE_TITLE.search(title))) and not is_senior(title)
+
+
+# ---------------------------------------------------------------- H-1B records (USCIS Employer Data Hub)
+_H1B_SUFFIX = re.compile(
+    r"\b(incorporated|inc|llc|l l c|llp|corp|corporation|co|company|ltd|limited|lp|plc|pc|pllc|pbc|na|n a|the|"
+    r"usa|us|u s|america|north america|holdings?|group|technologies|technology|tech|services|service|svcs|svc|"
+    r"solutions|systems|software|labs?|global|international|intl)\b")
+_h1b_cache = {}
+
+
+def _h1b_norm(name):
+    n = re.sub(r"[^a-z0-9 ]", " ", (name or "").lower().replace("&", " and "))
+    return re.sub(r"\s+", " ", _H1B_SUFFIX.sub(" ", n)).strip()
+
+
+def _h1b_data():
+    if not _h1b_cache:
+        import json
+        import os
+        import sys
+        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        try:
+            with open(os.path.join(base, "assets", "h1b_employers.json"), encoding="utf-8") as f:
+                d = json.load(f)
+        except (OSError, ValueError):
+            d = {"employers": {}, "years": []}
+        idx = {}
+        for k in d["employers"]:
+            idx.setdefault(k.split(" ", 1)[0], []).append(k)
+        _h1b_cache.update(data=d["employers"], idx=idx, years=d.get("years", []))
+    return _h1b_cache
+
+
+def h1b_record(company):
+    """Approvals per year [FY2022, FY2023] for this employer, or None. Tries legal-name variants
+    (e.g. 'Amazon' matches 'Amazon.com Services')."""
+    k = _h1b_norm(company)
+    if not k:
+        return None
+    c = _h1b_data()
+    best = c["data"].get(k)
+    if len(k) >= 4:
+        cands = [kk for kk in c["idx"].get(k.split(" ", 1)[0], []) if kk.startswith(k + " ")]
+        if cands:
+            top = max(cands, key=lambda kk: sum(c["data"][kk]))
+            if not best or sum(c["data"][top]) > sum(best):
+                best = c["data"][top]
+    return best
+
+
+def h1b_label(company):
+    rec = h1b_record(company)
+    if not rec or not sum(rec):
+        return ""
+    return f"{sum(rec):,} H-1B approvals (FY2022-23)"
+
+
+def known_filer(company):  # noqa: F811 - replaces the hand-made list with USCIS records, list as fallback
+    rec = h1b_record(company)
+    return bool(rec and sum(rec) >= 5) or (company or "").strip().lower() in PAST_H1B_FILERS

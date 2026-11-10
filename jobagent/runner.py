@@ -4,7 +4,7 @@ import os
 import re
 import threading
 
-from . import ai, rules, settings as cfg, sources
+from . import ai, email_alerts, more_sources, rules, settings as cfg, sources
 from .tracker import Store, outlook
 
 LOCK_STALE_MIN = 90
@@ -106,9 +106,31 @@ class Runner:
         ]
         if s.get("use_boards", True) and boards:
             plan.append(("Company boards", lambda w: sources.fetch_boards(boards, w, self.log, rules.wanted_title), 3, 14))
+        want = rules.wanted_title
+        plan += [
+            ("Hacker News", lambda w: more_sources.fetch_hn(w, self.log, want), 6, 30),
+            ("Remotive", lambda w: more_sources.fetch_remotive(w, self.log, want), 6, 7),
+            ("Himalayas", lambda w: more_sources.fetch_himalayas(w, self.log, want), 3, 7),
+            ("Workday sites", lambda w: more_sources.fetch_workday(
+                s.get("workday_sites") or more_sources.DEFAULT_WORKDAY, w, self.log, want), 6, 14),
+            ("SmartRecruiters/Workable", lambda w: more_sources.fetch_smart_workable(w, self.log, want), 6, 14),
+        ]
+        sec = cfg.get_secret
+        if sec("adzuna_app_id") and sec("adzuna_app_key"):
+            plan.append(("Adzuna", lambda w: more_sources.fetch_adzuna(sec("adzuna_app_id"), sec("adzuna_app_key"), w, self.log), 3, 3))
+        if sec("jooble_api_key"):
+            plan.append(("Jooble", lambda w: more_sources.fetch_jooble(sec("jooble_api_key"), w, self.log), 3, 3))
+        if sec("jsearch_api_key"):  # free plan is ~200 requests a month: once a day, 5 searches
+            plan.append(("JSearch", lambda w: more_sources.fetch_jsearch(sec("jsearch_api_key"), w, self.log), 24, 3))
+        if s.get("gmail_address") and sec("gmail_app_password"):
+            plan.append(("Job-alert emails", lambda w: email_alerts.fetch_alerts(
+                s["gmail_address"], sec("gmail_app_password"), w, self.log), 0, 7))
+        off = set(s.get("sources_off") or [])
         for name, fetch, every_h, first_days in plan:
             if self._stop:
                 raise RuntimeError("Stopped")
+            if name in off:
+                continue
             last_src = src_state.get(name)
             age = (now - dt.datetime.fromisoformat(last_src)).total_seconds() if last_src else first_days * 86400
             if age < every_h * 3600:

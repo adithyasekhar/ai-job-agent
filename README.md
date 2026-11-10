@@ -5,7 +5,7 @@ against your resume, flags remote work and visa sponsorship, drafts cover letter
 tracks your applications. It runs in the background from the system tray.
 
 ## Download
-1. Go to [Releases](../../releases/latest) and download `AI-Job-Agent-v1.0.0-windows.zip`.
+1. Go to [Releases](../../releases/latest) and download `AI-Job-Agent-v1.1.0-windows.zip`.
 2. Unzip it anywhere, for example into `Documents`.
 3. Open the `AI Job Agent` folder and double-click **AI Job Agent.exe**.
    Windows may show "Windows protected your PC" because the app isn't code-signed: click **More info → Run anyway**.
@@ -16,9 +16,14 @@ Requires Windows 10 or 11 (64-bit) with the Microsoft Edge WebView2 runtime, whi
 The app stays in the system tray when you close the window; right-click the tray icon → Quit to stop it.
 
 ## What it does
-- **Finds jobs** from free sources: [AI Dev Jobs](https://aidevboard.com), [Remote OK](https://remoteok.com),
-  and 65 company career boards (Greenhouse, Lever, Ashby: Anthropic, OpenAI, Databricks, Scale AI, Samsara and
-  more). LinkedIn is optional through an [Apify](https://apify.com) token (paid per result).
+- **Finds jobs** from many free sources: [AI Dev Jobs](https://aidevboard.com), [Remote OK](https://remoteok.com),
+  [Remotive](https://remotive.com), [Himalayas](https://himalayas.app), Hacker News "Who is hiring", 65 company
+  career boards (Greenhouse, Lever, Ashby), SmartRecruiters and Workable boards, and 25 big-employer Workday career
+  sites (NVIDIA, Salesforce, Adobe, Capital One, Visa and more).
+- **Optional free-key sources:** Adzuna, Jooble and JSearch (Google Jobs, which includes LinkedIn and Indeed postings).
+- **Your job-alert emails:** reads LinkedIn, Indeed, Glassdoor and ZipRecruiter alert emails from Gmail (read-only,
+  with an app password). LinkedIn via [Apify](https://apify.com) is also optional (paid per result).
+- **H-1B records:** shows each company's H-1B approvals from USCIS data (fiscal years 2022–2023).
 - **Filters** out jobs it has already seen, senior titles, and roles unrelated to AI or your background.
 - **Scores fit 1–10** with AI, plus sponsorship (Yes / Maybe / No) and work setup (Remote / Hybrid / On-site).
 - **Drafts** a cover letter, resume tweaks and gaps list for top matches, and short LinkedIn outreach notes.

@@ -18,7 +18,8 @@ US_HINT = re.compile(
     r",\s*(al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy|dc)\b|"
     r"new york|san francisco|seattle|boston|austin|chicago|los angeles|denver|atlanta|dallas|houston|bay area", re.I)
 NON_US = re.compile(r"\b(uk|united kingdom|london|canada|toronto|india|bangalore|germany|berlin|europe|emea|apac|"
-                    r"australia|singapore|france|paris|netherlands|spain|poland|brazil|mexico|philippines|japan)\b", re.I)
+                    r"australia|singapore|france|paris|netherlands|spain|poland|brazil|mexico|philippines|japan|"
+                    r"eu|eea|czech|brno|latam|ireland|dublin|israel|tel aviv|portugal|lisbon|argentina|colombia)\b", re.I)
 
 LINKEDIN_TERMS = [
     "Workday AI", "AI Integration Engineer", "AI Automation Engineer", "AI Solutions Engineer", "AI Engineer",

@@ -10,7 +10,7 @@ import webbrowser
 
 import webview
 
-from . import ai, settings as cfg
+from . import ai, email_alerts, more_sources, rules, settings as cfg
 from .runner import Runner
 from .tracker import Store, outlook
 
@@ -119,6 +119,8 @@ class Api:
         out = []
         for r in store.jobs():
             r = dict(r)
+            r["h1b"] = r.get("h1b") or rules.h1b_label(r.get("company", ""))
+            r["known_filer"] = "Yes" if rules.known_filer(r.get("company", "")) else r.get("known_filer", "")
             r["outlook"] = outlook(r)
             r["has_desc"] = r["id"] in descs
             out.append(r)
@@ -201,6 +203,12 @@ class Api:
         s.update({"anthropic_masked": cfg.masked(a), "apify_masked": cfg.masked(p), "gemini_masked": cfg.masked(g),
                   "models": cfg.MODELS, "ollama_models": ai.ollama_models(),
                   "boards_text": " ".join(s.get("boards") or sources.DEFAULT_BOARDS),
+                  "workday_text": " ".join(s.get("workday_sites") or more_sources.DEFAULT_WORKDAY),
+                  "secrets_set": {k: bool(cfg.get_secret(k)) for k in cfg.KEYS},
+                  "adzuna_id_masked": cfg.masked(cfg.get_secret("adzuna_app_id")),
+                  "source_names": ["AI Dev Jobs", "Remote OK", "Company boards", "Hacker News", "Remotive", "Himalayas",
+                                   "Workday sites", "SmartRecruiters/Workable", "Adzuna", "Jooble", "JSearch",
+                                   "Job-alert emails"],
                   "profile": self._store().profile(), "start_with_windows": os.path.exists(startup_shortcut())})
         return s
 
@@ -221,6 +229,13 @@ class Api:
         for k in ("ollama_model", "gemini_model"):
             if k in data:
                 s[k] = str(data[k] or "").strip()
+        if "workday_text" in data:
+            lines = [ln.strip() for ln in data["workday_text"].replace(",", " ").split() if "/" in ln]
+            s["workday_sites"] = [] if lines == more_sources.DEFAULT_WORKDAY else lines
+        if isinstance(data.get("sources_off"), list):
+            s["sources_off"] = [str(x) for x in data["sources_off"]]
+        if "gmail_address" in data:
+            s["gmail_address"] = str(data["gmail_address"] or "").strip()
         if "boards_text" in data:
             from . import sources
             lines = [ln.strip() for ln in data["boards_text"].replace(",", " ").split() if ":" in ln]
@@ -235,6 +250,11 @@ class Api:
             cfg.set_secret("anthropic_api_key", "")
         if data.get("clear_apify"):
             cfg.set_secret("apify_token", "")
+        for k in ("adzuna_app_id", "adzuna_app_key", "jooble_api_key", "jsearch_api_key", "gmail_app_password"):
+            if data.get(k):
+                cfg.set_secret(k, data[k])
+            if data.get("clear_" + k):
+                cfg.set_secret(k, "")
         if data.get("gemini_api_key"):
             cfg.set_secret("gemini_api_key", data["gemini_api_key"])
         if data.get("clear_gemini"):
@@ -251,6 +271,29 @@ class Api:
         ok, msg, models = ai.test_provider(kind, key, model or cfg.load().get(
             {"claude": "model", "gemini": "gemini_model", "ollama": "ollama_model"}[kind], ""))
         return {"ok": ok, "message": msg, "models": models}
+
+    def test_source(self, name, a="", b=""):
+        """Quick live check of a keyed source; uses typed values or the saved ones."""
+        sec = cfg.get_secret
+        try:
+            if name == "gmail":
+                addr, pw = a or cfg.load().get("gmail_address", ""), b or sec("gmail_app_password")
+                if not addr or not pw:
+                    return {"ok": False, "message": "Enter your Gmail address and app password first."}
+                n = len(email_alerts.fetch_alerts(addr, pw, 7 * 86400, lambda m: None))
+                return {"ok": True, "message": f"Connected. Found {n} jobs in job-alert emails from the last 7 days."}
+            if name == "adzuna":
+                aid, key = a or sec("adzuna_app_id"), b or sec("adzuna_app_key")
+                n = len(more_sources.fetch_adzuna(aid, key, 86400, lambda m: None))
+            elif name == "jooble":
+                n = len(more_sources.fetch_jooble(a or sec("jooble_api_key"), 86400, lambda m: None))
+            elif name == "jsearch":
+                n = len(more_sources.fetch_jsearch(a or sec("jsearch_api_key"), 86400, lambda m: None, queries=1))
+            else:
+                return {"ok": False, "message": "Unknown source."}
+            return {"ok": True, "message": f"Working: {n} jobs found in a quick search."}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "message": str(e)[:200]}
 
     def test_apify(self, token=""):
         import requests
