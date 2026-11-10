@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Job Agent</title>
+<style>
+:root{
+  --bg:#f6f7fb; --panel:#ffffff; --panel2:#f1f3f9; --line:#e3e6ef; --text:#151826; --muted:#646b82;
+  --accent:#5b4cf0; --accent-soft:#ece9ff; --good:#127a4a; --good-bg:#dcf5e8; --warn:#8a5a00; --warn-bg:#fff1cc;
+  --bad:#b42318; --bad-bg:#fde4e1; --info:#1d5fbf; --info-bg:#e0ecff; --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d212a; --line:#2a2f3b; --text:#e9ebf2; --muted:#9aa1b5;
+    --accent:#8b7fff; --accent-soft:#2a2550; --good:#5fd39a; --good-bg:#16352a; --warn:#f2c35b; --warn-bg:#3a2f12;
+    --bad:#ff8a7a; --bad-bg:#3d1c19; --info:#86b4ff; --info-bg:#182a47; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25);
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:232px 1fr;height:100vh}
+/* sidebar */
+.side{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:18px 12px}
+.brand{display:flex;align-items:center;gap:10px;padding:2px 8px 18px;font-weight:650;font-size:16px}
+.brand img{width:30px;height:30px}
+.nav button{all:unset;display:flex;align-items:center;justify-content:space-between;width:100%;box-sizing:border-box;padding:9px 10px;border-radius:9px;cursor:pointer;color:var(--muted);font-weight:500;margin-bottom:2px}
+.nav button:hover{background:var(--panel2);color:var(--text)}
+.nav button.on{background:var(--accent-soft);color:var(--accent)}
+.nav .count{font-size:12px;background:var(--panel2);padding:1px 8px;border-radius:99px;color:var(--muted)}
+.nav button.on .count{background:var(--panel);color:var(--accent)}
+.side .grow{flex:1}
+.status{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2)}
+.status .s1{font-weight:600;display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.dot.live{background:var(--good);box-shadow:0 0 0 4px var(--good-bg);animation:pulse 1.4s infinite}
+.dot.paused{background:var(--warn)}
+@keyframes pulse{50%{box-shadow:0 0 0 1px var(--good-bg)}}
+.status .s2{color:var(--muted);font-size:12.5px;margin:4px 0 10px}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:7px 13px;cursor:pointer;font-weight:550;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.small{padding:4px 10px;font-size:12.5px}
+.btn.danger{color:var(--bad)}
+.btn:disabled{opacity:.5;cursor:default}
+.wide{width:100%}
+/* main */
+.main{overflow:auto;position:relative}
+.wrap{padding:22px 28px 40px;max-width:1500px}
+h1{font-size:22px;margin:0 0 4px;font-weight:650}
+.sub{color:var(--muted);margin:0 0 18px}
+.banner{display:flex;gap:12px;align-items:center;background:var(--info-bg);color:var(--info);border-radius:11px;padding:10px 14px;margin-bottom:16px}
+.banner .btn{margin-left:auto}
+.toast{position:fixed;right:22px;bottom:22px;background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;box-shadow:var(--shadow);opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none;max-width:420px;z-index:30}
+.toast.show{opacity:1;transform:none}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center}
+.filters input[type=search]{flex:1;min-width:220px}
+.field{border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:7px 10px;outline:none}
+.field:focus{border-color:var(--accent)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:1;cursor:pointer;user-select:none}
+td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr.row{cursor:pointer}
+tr.row:hover td{background:var(--panel2)}
+tr.row.sel td{background:var(--accent-soft)}
+.t1{font-weight:600}
+.t2{color:var(--muted);font-size:12.5px}
+.fit{display:inline-grid;place-items:center;width:34px;height:28px;border-radius:8px;font-weight:700;background:var(--panel2);color:var(--muted)}
+.fit.hi{background:var(--good-bg);color:var(--good)}
+.fit.mid{background:var(--warn-bg);color:var(--warn)}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600;background:var(--panel2);color:var(--muted);white-space:nowrap}
+.pill.good{background:var(--good-bg);color:var(--good)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.pill.info{background:var(--info-bg);color:var(--info)}
+select.status-sel{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:4px 6px;font-size:12.5px}
+.empty{padding:48px;text-align:center;color:var(--muted)}
+/* drawer */
+.drawer{position:fixed;top:0;right:0;height:100vh;width:460px;max-width:100%;background:var(--panel);border-left:1px solid var(--line);box-shadow:var(--shadow);transform:translateX(105%);transition:transform .2s;z-index:20;display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.dhead{padding:18px 20px 12px;border-bottom:1px solid var(--line)}
+.dhead h2{margin:0 0 4px;font-size:18px;line-height:1.3}
+.dbody{padding:16px 20px;overflow:auto;flex:1}
+.close{float:right;border:0;background:none;font-size:22px;cursor:pointer;color:var(--muted);line-height:1}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;margin:12px 0 16px;font-size:13.5px}
+.kv div:nth-child(odd){color:var(--muted)}
+.box{background:var(--panel2);border-radius:10px;padding:10px 12px;margin:8px 0 14px;font-size:13.5px}
+.box.quote{border-left:3px solid var(--accent)}
+.label{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;margin-top:14px}
+textarea.field{width:100%;min-height:90px;resize:vertical}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px}
+.dbody a,.banner a{color:var(--accent);font-weight:550}
+.desc{white-space:pre-wrap;font-size:13px;color:var(--muted);max-height:320px;overflow:auto}
+/* drafts */
+.split{display:grid;grid-template-columns:320px 1fr;gap:16px;min-height:60vh}
+.list .item{padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.list .item:hover{background:var(--panel2)}
+.list .item.on{background:var(--accent-soft)}
+.doc{padding:22px 28px;overflow:auto}
+.doc h1{font-size:20px}.doc h2{font-size:16px;margin:20px 0 6px}
+.doc p,.doc li{max-width:75ch}
+.doc a{color:var(--accent)}
+/* activity */
+.log{font:12.5px/1.6 "Cascadia Mono",Consolas,monospace;white-space:pre-wrap;padding:14px 16px;max-height:280px;overflow:auto;color:var(--muted)}
+/* settings */
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px}
+.sect{padding:18px 20px}
+.sect h3{margin:0 0 4px;font-size:15px}
+.sect .hint{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+.frow{display:flex;gap:8px;align-items:center;margin:8px 0}
+.frow label{min-width:170px;color:var(--muted)}
+.frow .field{flex:1;min-width:0}
+.check{display:flex;gap:10px;align-items:center;margin:9px 0;cursor:pointer}
+.check input{width:16px;height:16px;accent-color:var(--accent)}
+.msg{font-size:12.5px;margin-left:4px}
+.msg.ok{color:var(--good)}.msg.err{color:var(--bad)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.stat{padding:14px 16px}
+.stat .n{font-size:24px;font-weight:700}
+.stat .l{color:var(--muted);font-size:12.5px}
+a.src{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><img src="../assets/icon.png" alt=""> AI Job Agent</div>
+    <nav class="nav" id="nav">
+      <button data-view="top" class="on">Top matches <span class="count" id="c-top">0</span></button>
+      <button data-view="all">All jobs <span class="count" id="c-all">0</span></button>
+      <button data-view="pipeline">My pipeline <span class="count" id="c-pipe">0</span></button>
+      <button data-view="drafts">Cover letters <span class="count" id="c-drafts">0</span></button>
+      <button data-view="activity">Activity</button>
+      <button data-view="settings">Settings</button>
+    </nav>
+    <div class="grow"></div>
+    <div class="status">
+      <div class="s1"><span class="dot" id="dot"></span><span id="s1">Starting…</span></div>
+      <div class="s2" id="s2"></div>
+      <button class="btn primary wide" id="runBtn">Run now</button>
+    </div>
+  </aside>
+  <main class="main" id="main"><div class="wrap" id="view"></div></main>
+</div>
+<div class="drawer" id="drawer"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const STATUSES = ["New","Interested","Applied","Interview","Offer","Rejected","Skip"];
+let api, view = "top", jobs = [], state = {}, drafts = [], selected = null, sortKey = "fit", sortDir = -1;
+const filt = {q:"", setup:"", spons:"", source:"", minfit:"", hideClosed:true};
+let lastTask = "", lastRunning = false, pendingOpen = null;
+
+function toast(msg, ms=3200){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"), ms); }
+function fitCls(f){ return f>=8?"hi":f>=6?"mid":""; }
+function spPill(o){ return {Good:'<span class="pill good">Sponsors</span>',Possible:'<span class="pill warn">Possible</span>',No:'<span class="pill bad">No</span>'}[o] || '<span class="pill">Unknown</span>'; }
+function setupPill(w){ return w==="Remote"?'<span class="pill good">Remote</span>':w==="Possibly remote"?'<span class="pill good">Maybe remote</span>':w==="Hybrid"?'<span class="pill info">Hybrid</span>':w==="On-site"?'<span class="pill">On-site</span>':'<span class="pill">—</span>'; }
+function rel(iso){ if(!iso) return "never"; const d=(Date.now()-new Date(iso))/60000; if(d<1) return "just now"; if(d<60) return Math.round(d)+" min ago"; if(d<1440) return Math.round(d/60)+" h ago"; return Math.round(d/1440)+" d ago"; }
+
+async function boot(){
+  api = window.pywebview.api;
+  document.querySelectorAll("#nav button").forEach(b => b.onclick = () => go(b.dataset.view));
+  $("#runBtn").onclick = async () => {
+    if (state.running) { await api.stop_run(); toast("Stopping after the current step…"); return; }
+    const r = await api.run_now(); if (!r.ok) toast(r.message); else toast("Run started");
+    poll();
+  };
+  await refreshJobs(); await poll(); render();
+  setInterval(poll, 2000);
+  setInterval(tickStatus, 1000);
+}
+window.addEventListener("pywebviewready", boot);
+
+async function refreshJobs(){ jobs = await api.get_jobs(); drafts = await api.list_drafts(); counts(); }
+function counts(){
+  const t = state.threshold || 8;
+  $("#c-all").textContent = jobs.length;
+  $("#c-top").textContent = jobs.filter(j => (j.fit||0) >= 7 && !["Rejected","Skip"].includes(j.status)).length;
+  $("#c-pipe").textContent = jobs.filter(j => ["Interested","Applied","Interview","Offer"].includes(j.status)).length;
+  $("#c-drafts").textContent = drafts.length;
+}
+async function poll(){
+  state = await api.get_state();
+  const busy = state.running || state.task;
+  if ((lastRunning || lastTask) && !busy) {           // a task just finished
+    if (state.task_result) toast(state.task_result, 5000);
+    const reopen = pendingOpen && selected === pendingOpen ? pendingOpen : null; pendingOpen = null;
+    await refreshJobs(); if (["top","all","pipeline","drafts"].includes(view)) render();
+    if (reopen && view !== "drafts") openJob(reopen);
+  }
+  if (view === "activity") { const l=$("#livelog"); if(l){ const atEnd=l.scrollTop+l.clientHeight>=l.scrollHeight-20; l.textContent = state.lines.join("\n") || "No run yet in this session."; if(atEnd) l.scrollTop=l.scrollHeight; } }
+  lastRunning = state.running; lastTask = state.task;
+  tickStatus();
+}
+function tickStatus(){
+  const dot=$("#dot"), s1=$("#s1"), s2=$("#s2"), b=$("#runBtn");
+  if (state.running || state.task) {
+    const isRun = !state.task || state.task==="Run" || state.task==="Scheduled run";
+    dot.className="dot live"; s1.textContent = isRun ? "Searching for jobs…" : state.task+"…";
+    s2.textContent = (state.lines||[]).slice(-1)[0]?.slice(10) || "Working…";
+    b.textContent = isRun ? "Stop" : "Working…"; b.disabled = !isRun;
+    return;
+  }
+  b.disabled=false; b.textContent="Run now";
+  if (!state.schedule_enabled) { dot.className="dot paused"; s1.textContent="Automatic runs paused"; s2.textContent="Last run "+rel(state.last_success); return; }
+  dot.className="dot"; const ms = new Date(state.next_run) - Date.now();
+  s1.textContent = ms <= 0 ? "Next run any moment" : "Next run in " + (ms>3600000 ? Math.floor(ms/3600000)+" h "+Math.round(ms%3600000/60000)+" min" : Math.floor(ms/60000)+":"+String(Math.floor(ms%60000/1000)).padStart(2,"0"));
+  s2.textContent = "Every " + state.interval + " min · last run " + rel(state.last_success);
+}
+function go(v){ view=v; document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("on", b.dataset.view===v)); closeDrawer(); render(); $("#main").scrollTop=0; }
+function render(){ ({top:renderJobs, all:renderJobs, pipeline:renderJobs, drafts:renderDrafts, activity:renderActivity, settings:renderSettings})[view](); }
+
+/* ---------------- jobs ---------------- */
+function banner(){
+  if (state.ai_label) return "";
+  return `<div class="banner">No AI is available, so jobs are scored with free keyword matching and cover letters are off. Open the Ollama app (free, local) or add a free Gemini key. <button class="btn small" onclick="go('settings')">AI settings</button></div>`;
+}
+function deptFrom(t){
+  t = t.toLowerCase();
+  if (/workday|hris|people (systems|tech)|hr (systems|tech)/.test(t)) return "HRIS";
+  if (/solutions|forward[- ]deployed|implementation/.test(t)) return "Solutions Engineering";
+  if (/data scien|analytics|data /.test(t)) return "Data";
+  if (/\bai\b|machine learning|\bml\b|llm|genai|generative/.test(t)) return "AI";
+  if (/automation|integration/.test(t)) return "Automation";
+  return "Engineering";
+}
+function peopleHtml(j){
+  const c = j.company, dept = deptFrom(j.title);
+  const core = j.title.replace(/\(.*?\)|,.*$|\b(senior|sr\.?|junior|jr\.?|associate|intern|i{1,3}|iv|\d)\b/gi, "").replace(/\s+/g," ").trim();
+  const li = q => "https://www.linkedin.com/search/results/people/?keywords=" + encodeURIComponent(q);
+  const g = q => "https://www.google.com/search?q=" + encodeURIComponent(q);
+  const rows = [
+    ["Recruiters", li(`recruiter ${c}`), g(`site:linkedin.com/in "${c}" (recruiter OR "talent acquisition")`)],
+    ["Hiring manager", li(`${dept} manager ${c}`), g(`site:linkedin.com/in "${c}" "${dept}" manager`)],
+    ["Directors / leaders", li(`director ${dept} ${c}`), g(`site:linkedin.com/in "${c}" ("director" OR "head of") "${dept}"`)],
+    ["Team members", li(`${core} ${c}`), g(`site:linkedin.com/in "${c}" "${core}"`)],
+  ];
+  const link = (u, label) => `<a href="#" onclick="api.open_url(${esc(JSON.stringify(u))});return false">${label}</a>`;
+  return `${j.poster_name ? `<div class="box">Posted by ${j.poster_url ? link(j.poster_url, esc(j.poster_name)) : esc(j.poster_name)}: the posting names this person as the hiring contact.</div>` : ""}
+    <table style="font-size:13px;margin:6px 0 4px"><tbody>${rows.map(([n,a,b]) => `<tr><td style="padding:5px 0;border:0">${n}</td><td style="padding:5px 8px;border:0">${link(a,"LinkedIn")}</td><td style="padding:5px 0;border:0">${link(b,"Google")}</td></tr>`).join("")}</tbody></table>
+    <div class="t2">Opens a search in your browser. You choose whom to contact; nothing is sent for you.</div>`;
+}
+function visibleJobs(){
+  let list = jobs.slice();
+  if (view==="top") list = list.filter(j => (j.fit||0) >= 7 && !["Rejected","Skip"].includes(j.status));
+  if (view==="pipeline") list = list.filter(j => ["Interested","Applied","Interview","Offer"].includes(j.status));
+  if (view==="all" && filt.hideClosed) list = list.filter(j => !["Rejected","Skip"].includes(j.status));
+  const q = filt.q.toLowerCase();
+  if (q) list = list.filter(j => (j.title+" "+j.company+" "+j.location+" "+(j.fit_reason||"")+" "+(j.notes||"")).toLowerCase().includes(q));
+  if (filt.setup) list = list.filter(j => filt.setup==="Remote" ? ["Remote","Possibly remote"].includes(j.work_setup) : j.work_setup===filt.setup);
+  if (filt.spons) list = list.filter(j => filt.spons==="ok" ? ["Good","Possible"].includes(j.outlook) : j.outlook===filt.spons);
+  if (filt.source) list = list.filter(j => j.source===filt.source);
+  if (filt.minfit) list = list.filter(j => (j.fit||0) >= +filt.minfit);
+  const val = j => sortKey==="fit" ? (j.fit??-1) : sortKey==="found" ? (j.found||"") : String(j[sortKey]||"").toLowerCase();
+  list.sort((a,b) => { const x=val(a), y=val(b); if (x<y) return -sortDir; if (x>y) return sortDir; return (b.found||"").localeCompare(a.found||""); });
+  return list;
+}
+function renderJobs(){
+  const titles = {top:["Top matches","Jobs scoring 7 or more that you haven't skipped or rejected."],
+                  all:["All jobs","Every AI job the agent has found."],
+                  pipeline:["My pipeline","Jobs you marked Interested, Applied, Interview or Offer."]};
+  const [h, sub] = titles[view];
+  const sources = [...new Set(jobs.map(j=>j.source).filter(Boolean))].sort();
+  const unscored = jobs.filter(j => j.fit==null || j.fit==="").length;
+  let statsHtml = "";
+  if (view==="top") {
+    const remote = jobs.filter(j=>["Remote","Possibly remote"].includes(j.work_setup)).length;
+    const applied = jobs.filter(j=>["Applied","Interview","Offer"].includes(j.status)).length;
+    const newToday = jobs.filter(j=>(j.found||"").startsWith(new Date().toISOString().slice(0,10))).length;
+    statsHtml = `<div class="stats">
+      <div class="card stat"><div class="n">${jobs.length}</div><div class="l">jobs tracked</div></div>
+      <div class="card stat"><div class="n">${newToday}</div><div class="l">found today</div></div>
+      <div class="card stat"><div class="n">${remote}</div><div class="l">remote</div></div>
+      <div class="card stat"><div class="n">${applied}</div><div class="l">applied or further</div></div></div>`;
+  }
+  $("#view").innerHTML = `
+    <h1>${h}</h1><p class="sub">${sub}</p>${banner()}${statsHtml}
+    <div class="filters">
+      <input type="search" class="field" id="q" placeholder="Search title, company, notes…" value="${esc(filt.q)}">
+      <select class="field" id="f-setup"><option value="">Any work setup</option><option>Remote</option><option>Hybrid</option><option>On-site</option></select>
+      <select class="field" id="f-spons"><option value="">Any sponsorship</option><option value="ok">Sponsors or possible</option><option value="Good">Sponsors</option><option value="No">No sponsorship</option><option value="Unknown">Unknown</option></select>
+      <select class="field" id="f-source"><option value="">All sources</option>${sources.map(s=>`<option>${esc(s)}</option>`).join("")}</select>
+      <select class="field" id="f-fit"><option value="">Any fit</option><option value="8">Fit 8+</option><option value="6">Fit 6+</option><option value="4">Fit 4+</option></select>
+      ${view==="all" ? `<label class="check" style="margin:0 6px"><input type="checkbox" id="f-closed" ${filt.hideClosed?"checked":""}> Hide skipped/rejected</label>` : ""}
+      <button class="btn" onclick="api.open_excel()">Open in Excel</button>
+      ${unscored && view==="all" ? `<button class="btn" onclick="scoreUnscored()">Score ${unscored} unscored</button>` : ""}
+    </div>
+    <div class="card" id="tablecard"></div>`;
+  $("#f-setup").value=filt.setup; $("#f-spons").value=filt.spons; $("#f-source").value=filt.source; $("#f-fit").value=filt.minfit;
+  $("#q").oninput = e => { filt.q=e.target.value; drawTable(); };
+  ["setup","spons","source","fit"].forEach(k => $("#f-"+k).onchange = e => { filt[k==="fit"?"minfit":k]=e.target.value; drawTable(); });
+  if ($("#f-closed")) $("#f-closed").onchange = e => { filt.hideClosed=e.target.checked; drawTable(); };
+  drawTable();
+}
+function drawTable(){
+  const list = visibleJobs();
+  const th = (k, label) => `<th data-k="${k}">${label}${sortKey===k ? (sortDir<0?" ↓":" ↑") : ""}</th>`;
+  if (!list.length) {
+    $("#tablecard").innerHTML = `<div class="empty">${jobs.length ? "No jobs match these filters." : "No jobs yet. Click <b>Run now</b> to search."}</div>`; return;
+  }
+  $("#tablecard").innerHTML = `<table><thead><tr>${th("fit","Fit")}${th("title","Job")}${th("work_setup","Setup")}${th("outlook","Sponsorship")}${th("source","Source")}${th("found","Found")}${th("status","Status")}</tr></thead>
+  <tbody>${list.map(j => `<tr class="row ${selected===j.id?"sel":""}" data-id="${esc(j.id)}">
+    <td><span class="fit ${fitCls(j.fit)}">${j.fit ?? "–"}</span></td>
+    <td><div class="t1">${esc(j.title)}${j.draft?' <span class="pill info" title="Cover letter ready">✎</span>':""}</div><div class="t2">${esc(j.company)} · ${esc(j.location)}${j.salary?" · "+esc(j.salary):""}</div></td>
+    <td>${setupPill(j.work_setup)}</td><td>${spPill(j.outlook)}</td>
+    <td class="t2">${esc(j.source||"")}</td><td class="t2">${esc((j.found||"").slice(5,16))}</td>
+    <td><select class="status-sel" data-id="${esc(j.id)}">${STATUSES.map(s=>`<option ${s===(j.status||"New")?"selected":""}>${s}</option>`).join("")}</select></td>
+  </tr>`).join("")}</tbody></table>`;
+  document.querySelectorAll("th[data-k]").forEach(t => t.onclick = () => { const k=t.dataset.k; if (sortKey===k) sortDir*=-1; else { sortKey=k; sortDir=(k==="fit"||k==="found")?-1:1; } drawTable(); });
+  document.querySelectorAll("tr.row").forEach(r => r.onclick = e => { if (e.target.tagName!=="SELECT" && e.target.tagName!=="OPTION") openJob(r.dataset.id); });
+  document.querySelectorAll("select.status-sel").forEach(s => { s.onclick = e => e.stopPropagation(); s.onchange = () => setStatus(s.dataset.id, s.value); });
+}
+async function setStatus(id, status){
+  const rec = await api.update_job(id, {status}); const j = jobs.find(x=>x.id===id);
+  if (j && rec) Object.assign(j, rec, {outlook:j.outlook, has_desc:j.has_desc});
+  counts(); toast(`Marked as ${status}`);
+  if (view!=="all") drawTable();
+  if (selected===id) openJob(id);
+}
+async function scoreUnscored(){ const r = await api.score_unscored(); toast(r.ok ? "Scoring started. This can take a minute." : r.message); poll(); }
+
+/* ---------------- drawer ---------------- */
+async function openJob(id){
+  const j = jobs.find(x=>x.id===id); if (!j) return; selected=id;
+  document.querySelectorAll("tr.row").forEach(r=>r.classList.toggle("sel", r.dataset.id===id));
+  const d = $("#drawer");
+  d.innerHTML = `<div class="dhead"><button class="close" onclick="closeDrawer()">×</button>
+      <h2>${esc(j.title)}</h2><div class="t2">${esc(j.company)} · ${esc(j.location)}</div></div>
+    <div class="dbody">
+      <div class="actions">
+        <button class="btn primary" onclick="api.open_url('${esc(j.url)}')">Open posting</button>
+        ${j.draft ? `<button class="btn" onclick="showDraft('${esc(j.draft.replace(/\\/g,"/"))}')">View cover letter</button>`
+                  : `<button class="btn" id="draftBtn" ${state.ai_label?"":"disabled title='Start Ollama or add a Gemini or Claude key in Settings'"}>Write cover letter</button>`}
+      </div>
+      <div class="kv">
+        <div>Fit</div><div><span class="fit ${fitCls(j.fit)}">${j.fit ?? "–"}</span></div>
+        <div>Status</div><div><select class="status-sel" id="d-status">${STATUSES.map(s=>`<option ${s===(j.status||"New")?"selected":""}>${s}</option>`).join("")}</select></div>
+        <div>Work setup</div><div>${setupPill(j.work_setup)}</div>
+        <div>Sponsorship</div><div>${spPill(j.outlook)} ${j.known_filer==="Yes"?'<span class="t2">· known H-1B filer</span>':""}</div>
+        <div>Salary</div><div>${esc(j.salary||"Not listed")}</div>
+        <div>Level / type</div><div>${esc([j.level,j.type].filter(Boolean).join(" · ")||"—")}</div>
+        <div>Posted</div><div>${esc(j.posted||"—")} <span class="t2">· found ${esc(j.found||"")}</span></div>
+        <div>Source</div><div>${j.source==="Remote OK" ? '<a class="src" href="#" onclick="api.open_url(\'https://remoteok.com\');return false">Remote OK</a>' : esc(j.source||"")}</div>
+      </div>
+      ${j.fit_reason ? `<div class="label">Why it fits</div><div class="box">${esc(j.fit_reason)}</div>` : ""}
+      ${j.sponsorship_evidence ? `<div class="label">Sponsorship wording</div><div class="box quote">“${esc(j.sponsorship_evidence)}”</div>` : ""}
+      <div class="label">People to contact</div>${peopleHtml(j)}
+      <div class="actions" style="margin-top:10px"><button class="btn small" id="outreachBtn" ${state.ai_label?"":"disabled"}>${j.outreach ? "Rewrite outreach notes" : "Draft outreach notes"}</button></div>
+      ${j.outreach ? `<div class="box" id="outreachBox">${md(j.outreach)}<button class="btn small" id="copyOutreach">Copy notes</button></div>` : ""}
+      <div class="label">Applied on</div><input type="date" class="field" id="d-applied" value="${esc(j.applied_on||"")}" style="margin:6px 0 4px">
+      <div class="label">Notes</div><textarea class="field" id="d-notes" placeholder="Recruiter name, referral, interview dates…" style="margin-top:6px">${esc(j.notes||"")}</textarea>
+      <div class="label">Job description</div><div class="box desc" id="d-desc">${j.has_desc ? "Loading…" : "Full text wasn't saved for this job. Use Open posting."}</div>
+    </div>`;
+  d.classList.add("open");
+  $("#d-status").onchange = e => setStatus(id, e.target.value);
+  $("#d-notes").onchange = async e => { await api.update_job(id, {notes:e.target.value}); j.notes=e.target.value; toast("Notes saved"); };
+  $("#d-applied").onchange = async e => { await api.update_job(id, {applied_on:e.target.value}); j.applied_on=e.target.value; toast("Saved"); };
+  if ($("#draftBtn")) $("#draftBtn").onclick = async () => { const r = await api.write_draft(id); pendingOpen = id; toast(r.ok ? "Writing the cover letter… this can take a minute." : r.message, 4000); poll(); };
+  $("#outreachBtn").onclick = async () => { const r = await api.write_outreach(id); toast(r.ok ? "Drafting outreach notes…" : r.message, 4000); pendingOpen = id; poll(); };
+  if ($("#copyOutreach")) $("#copyOutreach").onclick = async () => { try { await navigator.clipboard.writeText(j.outreach); toast("Notes copied"); } catch { toast("Couldn't copy"); } };
+  if (j.has_desc) $("#d-desc").textContent = await api.get_description(id);
+}
+function closeDrawer(){ $("#drawer").classList.remove("open"); selected=null; document.querySelectorAll("tr.row.sel").forEach(r=>r.classList.remove("sel")); }
+document.addEventListener("keydown", e => { if (e.key==="Escape") closeDrawer(); });
+
+/* ---------------- drafts ---------------- */
+function md(src){
+  const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/(https?:\/\/[^\s)]+)/g, u => `<a href="#" onclick="api.open_url('${u}');return false">${u}</a>`);
+  let out=[], list=false;
+  for (const line of src.split(/\r?\n/)) {
+    const m = line.match(/^(#{1,3})\s+(.*)/), li = line.match(/^\s*[-*]\s+(.*)/);
+    if (!li && list) { out.push("</ul>"); list=false; }
+    if (m) out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`);
+    else if (li) { if (!list) { out.push("<ul>"); list=true; } out.push(`<li>${inline(li[1])}</li>`); }
+    else if (line.trim()) out.push(`<p>${inline(line)}</p>`);
+  }
+  if (list) out.push("</ul>");
+  return out.join("");
+}
+let curDraft = null;
+function renderDrafts(){
+  $("#view").innerHTML = `<h1>Cover letters</h1><p class="sub">Drafts for your best matches. Review and edit them before sending: the agent never applies for you.</p>${banner()}
+    ${drafts.length ? `<div class="split"><div class="card list" id="dlist">${drafts.map(d=>`<div class="item ${curDraft===d.rel?"on":""}" data-rel="${esc(d.rel.replace(/\\/g,"/"))}"><div class="t1">${esc(d.title)}</div><div class="t2">${esc(d.company)} · ${esc(d.modified)}</div></div>`).join("")}</div>
+      <div class="card doc" id="ddoc"><div class="empty">Pick a cover letter on the left.</div></div></div>`
+      : `<div class="card empty">No cover letters yet. They're written automatically for jobs scoring ${state.threshold||8}+, or open any job and click <b>Write cover letter</b>.</div>`}`;
+  document.querySelectorAll("#dlist .item").forEach(i => i.onclick = () => showDraft(i.dataset.rel));
+  if (curDraft) showDraft(curDraft);
+}
+async function showDraft(relPath){
+  if (view!=="drafts") { curDraft=relPath; go("drafts"); return; }
+  curDraft = relPath;
+  document.querySelectorAll("#dlist .item").forEach(i=>i.classList.toggle("on", i.dataset.rel===relPath));
+  const text = await api.read_draft(relPath);
+  $("#ddoc").innerHTML = `<div class="actions" style="margin-bottom:10px"><button class="btn" id="copyBtn">Copy cover letter</button><button class="btn" onclick="api.open_path('${esc(relPath)}')">Open file</button></div>${md(text)}`;
+  $("#copyBtn").onclick = async () => {
+    const m = text.match(/## Cover letter\s*\n([\s\S]*?)(\n## |$)/); const letter = (m ? m[1] : text).trim();
+    try { await navigator.clipboard.writeText(letter); toast("Cover letter copied"); } catch { toast("Couldn't copy. Use Open file instead."); }
+  };
+}
+
+/* ---------------- activity ---------------- */
+async function renderActivity(){
+  const hist = await api.get_history();
+  $("#view").innerHTML = `<h1>Activity</h1><p class="sub">What the agent did and when.</p>
+    <div class="card" style="margin-bottom:16px"><div style="padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600">Current / last run</div><div class="log" id="livelog"></div></div>
+    <div class="card"><table><thead><tr><th>Time</th><th>Result</th><th>Fetched</th><th>New</th><th>Top</th><th>Apify $</th><th>Note</th></tr></thead><tbody>
+    ${hist.length ? hist.map(h=>`<tr><td>${esc(h.time)}</td><td>${h.result==="ok"?'<span class="pill good">ok</span>':h.result==="partial"?'<span class="pill warn">partial</span>':'<span class="pill bad">'+esc(h.result)+'</span>'}</td><td>${esc(h.scraped)}</td><td>${esc(h.new)}</td><td>${esc(h.top)}</td><td>${esc(h.cost)}</td><td class="t2">${esc(h.note)}</td></tr>`).join("") : `<tr><td colspan="7" class="empty">No runs yet.</td></tr>`}
+    </tbody></table></div>`;
+  poll();
+}
+
+/* ---------------- settings ---------------- */
+async function renderSettings(){
+  const s = await api.get_settings();
+  const opt = (v, cur, label) => `<option value="${v}" ${String(v)===String(cur)?"selected":""}>${label}</option>`;
+  $("#view").innerHTML = `<h1>Settings</h1><p class="sub">Keys are stored in Windows Credential Manager, not in a file.</p>
+  <div class="grid2">
+    <div class="card sect"><h3>AI for scoring, cover letters and outreach</h3>
+      <p class="hint">Now using: <b>${esc(state.ai_label || "keyword matching (no AI)")}</b>. "Auto" tries Ollama, then Gemini, then Claude.</p>
+      <div class="frow"><label>Use</label><select class="field" id="ai_provider">${[["auto","Auto (free options first)"],["ollama","Ollama on this PC (free)"],["gemini","Google Gemini (free tier)"],["claude","Claude (paid)"],["keywords","Keyword matching only"]].map(([v,l])=>opt(v,s.ai_provider,l)).join("")}</select></div>
+      <div class="label">Ollama (free, runs on your PC, nothing leaves your computer)</div>
+      <div class="frow"><label>Model</label><select class="field" id="ollama_model">${s.ollama_models.length ? s.ollama_models.map(m=>opt(m,s.ollama_model||s.ollama_models[0],esc(m))).join("") : '<option value="">Ollama not running</option>'}</select><button class="btn small" id="t-oll">Test</button></div>
+      <div class="frow"><label></label><span class="msg" id="m-oll"></span></div>
+      <div class="label">Google Gemini (free tier from aistudio.google.com/apikey)</div>
+      <p class="hint" style="margin:4px 0 0">Free tier has daily limits, and Google may use free-tier prompts to improve its products.</p>
+      <div class="frow"><label>Gemini API key</label><input class="field" id="k-gem" type="password" placeholder="${s.gemini_masked ? "Saved: "+esc(s.gemini_masked) : "AIza…"}"></div>
+      <div class="frow"><label>Model</label><select class="field" id="gemini_model">${s.gemini_model?opt(s.gemini_model,s.gemini_model,esc(s.gemini_model)):'<option value="">Pick after Test</option>'}</select><button class="btn small" id="t-gem">Test</button>${s.gemini_masked?'<button class="btn small danger" id="x-gem">Remove</button>':""}</div>
+      <div class="frow"><label></label><span class="msg" id="m-gem"></span></div>
+      <div class="label">Claude (paid, best quality, console.anthropic.com)</div>
+      <div class="frow"><label>Anthropic API key</label><input class="field" id="k-ant" type="password" placeholder="${s.anthropic_masked ? "Saved: "+esc(s.anthropic_masked) : "sk-ant-…"}"></div>
+      <div class="frow"><label>Model</label><select class="field" id="model">${Object.entries(s.models).map(([k,v])=>opt(k,s.model,esc(v))).join("")}</select><button class="btn small" id="t-ant">Test</button>${s.anthropic_masked?'<button class="btn small danger" id="x-ant">Remove</button>':""}</div>
+      <div class="frow"><label></label><span class="msg" id="m-ant"></span></div>
+    </div>
+    <div class="card sect"><h3>Job sources</h3>
+      <p class="hint">AI Dev Jobs, Remote OK and company career boards are free. LinkedIn adds the most jobs but needs an Apify token (paid per result).</p>
+      <label class="check"><input type="checkbox" id="use_boards" ${s.use_boards?"checked":""}> Company career boards (Greenhouse, Lever, Ashby), checked every 3 hours</label>
+      <textarea class="field" id="boards_text" style="min-height:70px;font-size:12px" title="One per line or space-separated, like greenhouse:anthropic, lever:palantir, ashby:openai">${esc(s.boards_text)}</textarea>
+      <div class="t2" style="margin-bottom:10px">Add a company as greenhouse:name, lever:name or ashby:name (the name in its jobs-page URL).</div>
+      <div class="frow"><label>Apify token</label><input class="field" id="k-apify" type="password" placeholder="${s.apify_masked ? "Saved: "+esc(s.apify_masked) : "apify_api_…"}"></div>
+      <div class="frow"><label></label><button class="btn small" id="t-apify">Test</button>${s.apify_masked?'<button class="btn small danger" id="x-apify">Remove</button>':""}<span class="msg" id="m-apify"></span></div>
+      <label class="check"><input type="checkbox" id="use_linkedin" ${s.use_linkedin?"checked":""}> Search LinkedIn when a token is saved</label>
+      <div class="frow"><label>LinkedIn spend cap per run</label><select class="field" id="cap">${[0.05,0.1,0.2,0.5,1].map(v=>opt(v,s.apify_cap_usd,"$"+v.toFixed(2))).join("")}</select></div>
+    </div>
+    <div class="card sect"><h3>Schedule</h3>
+      <p class="hint">Runs happen in the background while the app is open or in the tray.</p>
+      <label class="check"><input type="checkbox" id="schedule_enabled" ${s.schedule_enabled?"checked":""}> Run automatically</label>
+      <div class="frow"><label>Every</label><select class="field" id="interval">${[[15,"15 minutes"],[30,"30 minutes"],[60,"1 hour"],[120,"2 hours"],[240,"4 hours"],[480,"8 hours"],[1440,"Once a day"]].map(([v,l])=>opt(v,s.interval_minutes,l)).join("")}</select></div>
+      <label class="check"><input type="checkbox" id="start_with_windows" ${s.start_with_windows?"checked":""}> Start with Windows (in the tray)</label>
+    </div>
+    <div class="card sect"><h3>Matching and alerts</h3>
+      <p class="hint">Jobs at or above the alert score trigger a notification and get a cover letter.</p>
+      <div class="frow"><label>Alert and draft at fit</label><select class="field" id="alert_threshold">${[6,7,8,9].map(v=>opt(v,s.alert_threshold,v+"+")).join("")}</select></div>
+      <div class="frow"><label>Cover letters per run</label><select class="field" id="max_drafts_per_run">${[0,1,2,3,5].map(v=>opt(v,s.max_drafts_per_run,v)).join("")}</select></div>
+      <label class="check"><input type="checkbox" id="needs_sponsorship" ${s.needs_sponsorship?"checked":""}> I need visa sponsorship (rank down jobs that rule it out)</label>
+      <label class="check"><input type="checkbox" id="notifications" ${s.notifications?"checked":""}> Desktop notifications</label>
+    </div>
+  </div>
+  <div class="card sect" style="margin-top:16px"><h3>Your profile</h3>
+    <p class="hint">Claude uses this to score jobs and write cover letters. Keep it accurate. It never invents experience beyond what's here.</p>
+    <textarea class="field" id="profile" style="min-height:300px;font-family:'Cascadia Mono',Consolas,monospace;font-size:12.5px">${esc(s.profile)}</textarea>
+  </div>
+  <div class="actions" style="margin-top:16px;align-items:center">
+    <button class="btn primary" id="save">Save settings</button>
+    <button class="btn" onclick="api.open_path('')">Open data folder</button>
+    <span class="t2">Data folder: ${esc(s.data_dir)}</span>
+  </div>`;
+  const msg = (id, r) => { const m=$(id); m.textContent=r.message; m.className="msg "+(r.ok?"ok":"err"); };
+  const testAi = async (kind, msgId, key, sel) => {
+    $(msgId).textContent = kind==="ollama" ? "Testing… the first answer can take ~30 seconds while the model loads." : "Testing…"; $(msgId).className="msg";
+    const r = await api.test_ai(kind, key, sel ? sel.value : ""); msg(msgId, r);
+    if (sel && r.models && r.models.length) { const cur = sel.value; sel.innerHTML = r.models.map(m=>opt(m, cur && r.models.includes(cur) ? cur : r.models[0], esc(m))).join(""); }
+  };
+  $("#t-oll").onclick = () => testAi("ollama", "#m-oll", "", $("#ollama_model"));
+  $("#t-gem").onclick = () => testAi("gemini", "#m-gem", $("#k-gem").value.trim(), $("#gemini_model"));
+  $("#t-ant").onclick = () => testAi("claude", "#m-ant", $("#k-ant").value.trim(), null);
+  if ($("#x-gem")) $("#x-gem").onclick = async () => { await api.save_settings({clear_gemini:true}); toast("Gemini key removed"); state = await api.get_state(); renderSettings(); };
+  $("#t-apify").onclick = async () => { $("#m-apify").textContent="Testing…"; $("#m-apify").className="msg"; msg("#m-apify", await api.test_apify($("#k-apify").value.trim())); };
+  if ($("#x-ant")) $("#x-ant").onclick = async () => { await api.save_settings({clear_anthropic:true}); toast("Anthropic key removed"); state = await api.get_state(); renderSettings(); };
+  if ($("#x-apify")) $("#x-apify").onclick = async () => { await api.save_settings({clear_apify:true}); toast("Apify token removed"); state = await api.get_state(); renderSettings(); };
+  $("#save").onclick = async () => {
+    const data = {
+      anthropic_api_key: $("#k-ant").value.trim(), apify_token: $("#k-apify").value.trim(), model: $("#model").value,
+      gemini_api_key: $("#k-gem").value.trim(), gemini_model: $("#gemini_model").value, ollama_model: $("#ollama_model").value,
+      ai_provider: $("#ai_provider").value, use_boards: $("#use_boards").checked, boards_text: $("#boards_text").value,
+      use_linkedin: $("#use_linkedin").checked, apify_cap_usd: +$("#cap").value, schedule_enabled: $("#schedule_enabled").checked,
+      interval_minutes: +$("#interval").value, start_with_windows: $("#start_with_windows").checked,
+      alert_threshold: +$("#alert_threshold").value, max_drafts_per_run: +$("#max_drafts_per_run").value,
+      needs_sponsorship: $("#needs_sponsorship").checked, notifications: $("#notifications").checked, profile: $("#profile").value,
+    };
+    if (data.max_drafts_per_run === 0) data.max_drafts_per_run = 0;
+    await api.save_settings(data); state = await api.get_state(); toast("Settings saved"); renderSettings(); tickStatus();
+  };
+}
+</script>
+</body>
+</html>

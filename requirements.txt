@@ -1,0 +1,9 @@
+anthropic
+pywebview
+pystray
+pillow
+keyring
+requests
+openpyxl
+winotify
+pyinstaller

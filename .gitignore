@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+.venv/
+venv/
+
+# Personal data never belongs in the repo (the app keeps it in Documents\AI Job Agent)
+tracker_data.json
+jobs_tracker*.xlsx
+profile.md
+runs/
+drafts/
+*.log
