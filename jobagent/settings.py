@@ -51,7 +51,7 @@ KEYS = ("anthropic_api_key", "gemini_api_key", "apify_token", "adzuna_app_id", "
 def load():
     s = dict(DEFAULTS)
     try:
-        with open(CONFIG_FILE, encoding="utf-8") as f:
+        with open(CONFIG_FILE, encoding="utf-8-sig") as f:  # tolerate a BOM (e.g. edited in Notepad)
             s.update(json.load(f))
     except (FileNotFoundError, json.JSONDecodeError):
         pass
