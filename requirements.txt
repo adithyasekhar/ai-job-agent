@@ -1,10 +1,14 @@
 anthropic
+fpdf2
 keyring
 numpy
 openpyxl
 pillow
+playwright
 pyinstaller
+pypdf
 pystray
+python-docx
 pywebview
 qrcode
 requests

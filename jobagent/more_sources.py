@@ -13,8 +13,9 @@ import requests
 from . import rules
 from .sources import UA, _iso_ts, looks_us, strip_html
 
-SEARCH_QUERIES = ["AI engineer", "machine learning engineer", "generative AI", "AI automation", "HRIS Workday",
-                  "AI solutions engineer", "data scientist"]
+def search_queries(n=7):
+    """API search terms: the profile's target roles."""
+    return rules.TARGET_ROLES[:n]
 
 
 def _cutoff(window_secs):
@@ -75,7 +76,7 @@ def fetch_hn(window_secs, log, wanted):
 # ---------------------------------------------------------------- Remotive (credit + link back required)
 def fetch_remotive(window_secs, log, wanted):
     cutoff, items, seen = _cutoff(window_secs), [], set()
-    for q in ("ai", "machine learning", "llm", "hris"):
+    for q in ("ai", "machine learning", "llm", "data scientist"):
         r = requests.get("https://remotive.com/api/remote-jobs", headers=UA, timeout=30, params={"search": q, "limit": 100})
         r.raise_for_status()
         for j in r.json().get("jobs", []):
@@ -131,7 +132,7 @@ DEFAULT_WORKDAY = (
 WORKDAY_NAMES = {"nvidia": "NVIDIA", "hpe": "Hewlett Packard Enterprise", "cvshealth": "CVS Health", "fmr": "Fidelity",
                  "att": "AT&T", "statestreet": "State Street", "3m": "3M", "kla": "KLA", "capitalone": "Capital One",
                  "paypal": "PayPal"}
-WORKDAY_SEARCHES = ["AI", "machine learning", "HRIS", "Workday", "automation", "data scientist"]
+WORKDAY_SEARCHES = ["AI", "machine learning", "data scientist", "generative AI", "LLM"]
 
 
 def _posted_days(text):
@@ -208,7 +209,7 @@ def fetch_smart_workable(window_secs, log, wanted, smart=None, workable=None):
     cutoff, items, ids = _cutoff(window_secs), [], set()
     for cid in smart or DEFAULT_SMARTRECRUITERS:
         try:
-            for q in ("AI", "machine learning", "HRIS", "automation"):
+            for q in ("AI", "machine learning", "data scientist"):
                 r = requests.get(f"https://api.smartrecruiters.com/v1/companies/{cid}/postings", headers=UA, timeout=30,
                                  params={"q": q, "limit": 100, "country": "us"})
                 if not r.ok:
@@ -258,7 +259,7 @@ def fetch_smart_workable(window_secs, log, wanted, smart=None, workable=None):
 def fetch_adzuna(app_id, app_key, window_secs, log):
     days = max(1, min(30, -(-window_secs // 86400)))
     items = []
-    for q in SEARCH_QUERIES:
+    for q in search_queries():
         r = requests.get("https://api.adzuna.com/v1/api/jobs/us/search/1", headers=UA, timeout=30, params={
             "app_id": app_id, "app_key": app_key, "what": q, "max_days_old": days, "results_per_page": 50,
             "content-type": "application/json"})
@@ -279,7 +280,7 @@ def fetch_adzuna(app_id, app_key, window_secs, log):
 
 def fetch_jooble(key, window_secs, log):
     cutoff, items = _cutoff(max(window_secs, 86400)), []
-    for q in SEARCH_QUERIES:
+    for q in search_queries():
         r = requests.post(f"https://jooble.org/api/{key}", headers={**UA, "Content-Type": "application/json"}, timeout=30,
                           json={"keywords": q, "location": "United States", "page": 1})
         if r.status_code in (401, 403):
@@ -304,7 +305,7 @@ def fetch_jsearch(key, window_secs, log, queries=5):
     The free plan is about 200 requests a month, so the runner calls this once a day with 5 queries."""
     span = "today" if window_secs <= 86400 else "3days" if window_secs <= 3 * 86400 else "week"
     items = []
-    for q in SEARCH_QUERIES[:queries]:
+    for q in search_queries(queries):
         r = requests.get("https://jsearch.p.rapidapi.com/search", timeout=40,
                          params={"query": f"{q} in USA", "page": 1, "num_pages": 1, "date_posted": span, "country": "us"},
                          headers={**UA, "X-RapidAPI-Key": key, "X-RapidAPI-Host": "jsearch.p.rapidapi.com"})

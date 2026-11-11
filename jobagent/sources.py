@@ -21,12 +21,9 @@ NON_US = re.compile(r"\b(uk|united kingdom|london|canada|toronto|india|bangalore
                     r"australia|singapore|france|paris|netherlands|spain|poland|brazil|mexico|philippines|japan|"
                     r"eu|eea|czech|brno|latam|ireland|dublin|israel|tel aviv|portugal|lisbon|argentina|colombia)\b", re.I)
 
-LINKEDIN_TERMS = [
-    "Workday AI", "AI Integration Engineer", "AI Automation Engineer", "AI Solutions Engineer", "AI Engineer",
-    "Generative AI Engineer", "AI Specialist", "LLM Engineer", "Machine Learning Engineer", "MLOps Engineer",
-    "Data Scientist", "Prompt Engineer", "Applied Scientist", "NLP Engineer", "Computer Vision Engineer",
-    "AI Research Engineer",
-]
+def linkedin_terms():
+    from . import rules
+    return rules.TARGET_ROLES[:16]
 
 
 def strip_html(s):
@@ -114,7 +111,7 @@ def fetch_linkedin(token, window_secs, cap_usd, log, stop):
     secs = max(1800, min(window_secs, 7 * 86400))
     urls = [{"url": "https://www.linkedin.com/jobs/search/?" + urllib.parse.urlencode({
         "keywords": t, "location": "United States", "geoId": "103644278", "f_TPR": f"r{secs}", "f_E": "1,2,3,4"})}
-        for t in LINKEDIN_TERMS]
+        for t in linkedin_terms()]
     body = {"startUrls": urls, "maxRowsPerUrl": 25, "companyProfile": False, "enrichCompany": False}
     r = requests.post(f"{APIFY}/acts/{ACTOR}/runs", headers=h, json=body, timeout=60,
                       params={"maxTotalChargeUsd": cap_usd, "timeout": 600})

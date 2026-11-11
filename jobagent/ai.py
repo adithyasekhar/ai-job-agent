@@ -78,7 +78,7 @@ Job link: {url}
 (3 bullets tying their real experience to this job's requirements)
 
 ## Cover letter
-(under 250 words, specific to this posting, honest about moving into AI where relevant, no invented facts,
+(under 250 words, specific to this posting, honest about any gaps, no invented facts,
 signed with the candidate's name from the profile)
 
 ## Resume tweaks for this application
@@ -452,34 +452,31 @@ def test_key(api_key, model):
 
 
 # ---------------------------------------------------------------- free fallback
-# Whole-word keyword lists for the free fallback. STRONG terms are the candidate's core background.
-STRONG = ["workday", "hris", "hcm", "hr tech", "hr technology", "people analytics", "human capital",
-          "servicenow", "enterprise integration", "integration engineer", "payroll", "prism"]
-MEDIUM = ["integration", "integrations", "automation", "workflow", "workflows", "orchestration", "etl", "sql",
-          "governance", "compliance", "implementation", "solutions engineer", "forward deployed",
-          "business analyst", "enterprise", "salesforce", "power automate", "rpa", "low-code", "reporting"]
-HARD = ["phd", "ph.d", "publications", "research scientist", "pytorch", "tensorflow", "cuda", "computer vision",
-        "reinforcement learning", "fine-tuning", "pretraining", "embedded", "robotics", "kubernetes", "c\\+\\+",
-        "deep learning", "statistics", "quantitative", "rust", "golang"]
+# Free fallback when no AI is available: compare the skills a posting asks for with the skills the profile lists.
+HARD = ["phd", "ph.d", "publications", "10\\+ years", "8\\+ years", "7\\+ years", "security clearance"]
 
 
 def _found(words, text):
     return [w.replace("\\", "") for w in words if re.search(r"(?<![a-z])" + w + r"(?![a-z])", text)]
 
 
-def keyword_score(job, description, needs_sponsorship):
+def keyword_score(job, description, needs_sponsorship, profile=""):
     text = f"{job['title']} {description}".lower()
-    strong, medium, hard = _found(STRONG, text), _found(MEDIUM, text), _found(HARD, text)
-    good = strong + medium
-    fit = 3 + min(len(strong), 3) * 1.5 + min(len(medium), 5) * 0.6 - min(len(hard), 5) * 0.9
-    if re.search(r"\b(intern|internship)\b", job["title"], re.I):
-        fit -= 1.5
-    if rules.AI_TITLE.search(job["title"]) and any(k in text for k in ("workday", "hris", "integration", "automation")):
-        fit += 1
+    known = re.split(r"#+\s*gaps", profile or "", flags=re.I)[0].lower()
+    have, missing = [], []
+    for name, pat in rules.SKILL_TERMS.items():
+        if re.search(r"(?<![a-z])(?:" + pat + r")", text):
+            (have if re.search(r"(?<![a-z])(?:" + pat + r")", known) else missing).append(name)
+    hard = _found(HARD, text)
+    fit = 4 + min(len(have), 5) * 0.8 - min(len(missing), 5) * 0.6 - len(hard) * 1.2
+    if rules.AI_TITLE.search(job["title"]):
+        fit += 0.5
+    if re.search(r"\b(intern|internship)\b", job["title"], re.I) and "intern" not in known:
+        fit -= 1
     fit = int(round(max(1, min(8, fit))))  # keyword scoring never claims a 9-10
     if needs_sponsorship and job.get("sponsorship") == "No":
         fit = min(fit, 4)
-    reason = "Keyword match (no AI): " + (", ".join(good[:4]) if good else "few profile keywords")
-    if hard:
-        reason += "; gaps: " + ", ".join(hard[:3])
+    reason = "Keyword match (no AI): " + (", ".join(have[:4]) if have else "few of your listed skills")
+    if missing:
+        reason += "; missing: " + ", ".join(missing[:3])
     return {"fit": fit, "fit_reason": reason[:200]}

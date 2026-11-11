@@ -20,7 +20,7 @@ from . import settings as cfg
 PORT = 8740
 ALLOWED = {"get_state", "get_jobs", "get_description", "update_job", "run_now", "stop_run", "write_draft",
            "write_outreach", "write_gap_plan", "list_drafts", "read_draft", "get_history", "get_dashboard",
-           "score_unscored"}
+           "score_unscored", "tailor_resume"}
 SHIM = """<script>
 window.CAREERPILOT_REMOTE = true;
 window.pywebview = {api: new Proxy({}, {get: (_, name) => (...args) =>

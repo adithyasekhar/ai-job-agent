@@ -159,8 +159,17 @@ class Runner:
         store.save_state(st)
         return items, cost, errors
 
+    def _apply_profile(self, store, s):
+        prefs = store.prefs()
+        rules.configure(prefs.get("target_roles"), prefs.get("extra_titles"))
+        if prefs.get("needs_sponsorship") is not None:
+            s["needs_sponsorship"] = bool(prefs["needs_sponsorship"])
+        s["_profile"] = store.profile()
+        return s
+
     def _run(self, store, s):
-        self.log("Run started")
+        s = self._apply_profile(store, s)
+        self.log(f"Run started (profile: {s.get('active_profile', '')})")
         edits = store.pull_excel_edits()
         if edits:
             self.log(f"Pulled {edits} edits from Excel")
@@ -175,7 +184,7 @@ class Runner:
         for j in new:
             if j["id"] not in sem:  # no embedding model: fall back to keywords
                 sem[j["id"]] = 10 * ai.keyword_score(dict(j, sponsorship=j["hint_sponsorship"]), j["description"],
-                                                     s["needs_sponsorship"])["fit"]
+                                                     s["needs_sponsorship"], profile)["fit"]
         p = self.provider(s)
         cap = 40 if (p and p.kind == "ollama") else 300
         ranked = sorted(new, key=lambda j: -sem.get(j["id"], 0))
@@ -241,6 +250,9 @@ class Runner:
         if not jobs:
             return {}
         p = self.provider(s)
+        if p and "**Your Name**" in profile:
+            self.log("This profile has no resume yet: using keyword matching. Add a resume in My profile.")
+            p = None
         if p:
             self.log(f"Scoring {len(jobs)} jobs with {p.label}")
             try:
@@ -261,7 +273,7 @@ class Runner:
         out = {}
         for j in jobs:
             j2 = dict(j, sponsorship=j.get("hint_sponsorship") or j.get("sponsorship", ""))
-            out[j["id"]] = ai.keyword_score(j2, j.get("description", ""), s["needs_sponsorship"])
+            out[j["id"]] = ai.keyword_score(j2, j.get("description", ""), s["needs_sponsorship"], s.get("_profile", ""))
         return out
 
     # ------------------------------------------------------------ drafts and outreach
@@ -338,6 +350,38 @@ class Runner:
             return "Skill-gap plan ready"
         return self._exclusive(go)
 
+    def tailor_resume(self, job_id):
+        """ATS-tailor the profile's resume for one job; saves Word + PDF in the profile's resumes folder."""
+        def go():
+            from . import ats, resume as resmod
+            p = self.provider()
+            if not p:
+                raise ai.AIError("No AI available. Start Ollama, or add a Gemini or Anthropic key in Settings.")
+            store = self.store()
+            base = resmod.load(store)
+            if not base:
+                raise ai.AIError("Add your resume first: open My profile and upload it (or fill in the form).")
+            job = next((r for r in store.jobs() if r["id"] == job_id), None)
+            if not job:
+                raise ai.AIError("Job not found.")
+            self.log(f"Tailoring your resume with {p.label} for {job['title']} at {job['company']}")
+            tailored, rep = ats.tailor(p, base, job["title"], job["company"], store.descriptions().get(job_id, ""))
+            folder = os.path.join(store.root, "resumes")
+            os.makedirs(folder, exist_ok=True)
+            safe = lambda x: re.sub(r"[^A-Za-z0-9]+", "-", x).strip("-")[:40]  # noqa: E731
+            stem = f"{safe(base.get('name') or 'Resume')}_{safe(job['company'])}_{safe(job['title'])}"
+            docx_path, pdf_path = os.path.join(folder, stem + ".docx"), os.path.join(folder, stem + ".pdf")
+            ats.export_docx(tailored, docx_path)
+            ats.export_pdf(tailored, pdf_path)
+            store.update_job(job_id, ats=rep, ats_docx=os.path.relpath(docx_path, store.root),
+                             ats_pdf=os.path.relpath(pdf_path, store.root))
+            msg = f"Resume tailored: ATS match {rep['before']}% → {rep['after']}%"
+            if rep["after"] < 90 and rep["missing"]:
+                msg += f" (missing, not in your resume: {', '.join(rep['missing'][:4])})"
+            self.log(msg)
+            return msg
+        return self._exclusive(go)
+
     def write_outreach(self, job_id):
         def go():
             p = self.provider()
@@ -357,6 +401,7 @@ class Runner:
         """Score jobs that have no fit yet (e.g. from the first scrape)."""
         def go():
             store, s = self.store(), cfg.load()
+            s = self._apply_profile(store, s)
             descs = store.descriptions()
             todo = [dict(r, description=descs.get(r["id"], "")) for r in store.jobs() if r.get("fit") in (None, "")]
             if not todo:

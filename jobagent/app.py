@@ -1,6 +1,7 @@
 """AI Job Agent desktop app: window (pywebview), tray icon (pystray), built-in scheduler."""
 import datetime as dt
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -101,7 +102,8 @@ class Api:
             "schedule_enabled": s["schedule_enabled"], "interval": s["interval_minutes"],
             "has_anthropic": bool(cfg.get_secret("anthropic_api_key")),
             "has_apify": bool(cfg.get_secret("apify_token")), "model": s["model"],
-            "threshold": s["alert_threshold"], "ai_label": self._ai_label(), "version": cfg.APP_VERSION,
+            "threshold": s["alert_threshold"], "ai_label": self._ai_label(), "version": cfg.APP_VERSION, "profile": s.get("active_profile", ""),
+            "has_resume": os.path.exists(os.path.join(s["data_dir"], "resume.json")),
             "profile_blank": "**Your Name**" in self._store().profile(),
         }
 
@@ -126,6 +128,9 @@ class Api:
             r["has_desc"] = r["id"] in descs
             if "opt" not in r and r["has_desc"]:
                 r["opt"] = rules.opt_status(descs[r["id"]])
+            if not r.get("exp_level"):
+                r["exp_level"], r["years"] = rules.experience_level(r.get("title", ""), r.get("level", ""),
+                                                                    descs.get(r["id"], ""))
             if r.get("match") in (None, ""):
                 r["match"] = int(r["fit"]) * 10 if isinstance(r.get("fit"), int) else None
             out.append(r)
@@ -154,6 +159,176 @@ class Api:
     def write_draft(self, job_id):
         return self._bg("Cover letter", lambda: self._runner.write_draft(job_id))
 
+    # ---- profiles and resume
+    def get_profiles(self):
+        from . import resume as resmod
+        s = cfg.load()
+        store = self._store()
+        out = []
+        for name, folder in s["profiles"].items():
+            try:
+                n = len(Store.load(os.path.join(folder, "tracker_data.json"), []))
+            except Exception:  # noqa: BLE001
+                n = 0
+            out.append({"name": name, "dir": folder, "jobs": n})
+        return {"active": s["active_profile"], "profiles": out, "prefs": store.prefs(),
+                "resume": resmod.load(store), "needs_sponsorship_global": s["needs_sponsorship"]}
+
+    def switch_profile(self, name):
+        s = cfg.load()
+        if name in s["profiles"] and not self._runner.running:
+            s["active_profile"] = name
+            cfg.save(s)
+            self._ai_cache = (0, "")
+        return self.get_profiles()
+
+    def create_profile(self, name):
+        name = (name or "").strip()[:40]
+        if not name:
+            return {"ok": False, "message": "Give the profile a name."}
+        s = cfg.load()
+        if name in s["profiles"]:
+            return {"ok": False, "message": "A profile with that name already exists."}
+        folder = os.path.join(cfg.PROFILES_ROOT, re.sub(r"[^A-Za-z0-9]+", "-", name).strip("-") or "profile")
+        os.makedirs(folder, exist_ok=True)
+        Store(folder)  # creates runs/, drafts/ and a profile template
+        s["profiles"][name] = folder
+        s["active_profile"] = name
+        cfg.save(s)
+        return {"ok": True, **self.get_profiles()}
+
+    def save_prefs(self, prefs):
+        from . import resume as resmod
+        store = self._store()
+        cur = store.prefs()
+        for k in ("target_roles", "extra_titles", "levels"):
+            if isinstance(prefs.get(k), list):
+                cur[k] = [str(x).strip() for x in prefs[k] if str(x).strip()]
+        if prefs.get("remote_pref") in ("any", "remote", "hybrid", "on-site"):
+            cur["remote_pref"] = prefs["remote_pref"]
+        if "needs_sponsorship" in prefs:
+            cur["needs_sponsorship"] = bool(prefs["needs_sponsorship"])
+        store.save_prefs(cur)
+        r = resmod.load(store)
+        if r:
+            store.save_profile(resmod.to_profile(r, cur))
+        return self.get_profiles()
+
+    def pick_resume_file(self):
+        """Opens a file picker on the PC; returns the chosen path or ''."""
+        if not self._window:
+            return ""
+        res = self._window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False,
+                                              file_types=("Resume files (*.docx;*.pdf;*.txt)", "All files (*.*)"))
+        return res[0] if res else ""
+
+    def import_resume(self, path):
+        """Reads the resume file and builds the profile (AI parsing runs in the background)."""
+        from . import resume as resmod
+        if not path or not os.path.exists(path):
+            return {"ok": False, "message": "File not found."}
+
+        def go():
+            store = self._store()
+            text = resmod.extract_text(path)
+            if len(text.strip()) < 80:
+                raise RuntimeError("Couldn't read text from that file. Try the Word version, or use the form.")
+            p = self._runner.provider()
+            if p:
+                data = resmod.parse(p, text)
+            else:  # no AI: keep the raw text so matching still works
+                data = {"name": text.strip().splitlines()[0][:60], "summary": "", "skills": [], "experience": [],
+                        "projects": [], "education": [], "raw_text": text[:15000]}
+            resmod.save(store, data, store.prefs(), path)
+            if not p:
+                store.save_profile("# Candidate profile\n\n## Resume summary\n\n" + text[:15000])
+            return f"Resume imported for {data.get('name') or 'this profile'}" + ("" if p else " (no AI available: saved as plain text)")
+        return self._bg("Reading resume", go)
+
+    def save_resume_form(self, form):
+        from . import resume as resmod
+        store = self._store()
+        data = resmod.from_form(form or {})
+        if not data.get("name"):
+            return {"ok": False, "message": "Add at least your name."}
+        resmod.save(store, data, store.prefs())
+        return {"ok": True, "message": "Resume saved", **self.get_profiles()}
+
+    # ---- application answers + assisted apply
+    def get_apply_answers(self):
+        from . import resume as resmod
+        store = self._store()
+        saved = Store.load(os.path.join(store.root, "apply_answers.json"), {})
+        r = resmod.load(store) or {}
+        name = (r.get("name") or "").split()
+        links = r.get("links") or []
+        pick = lambda pat: next((l for l in links if re.search(pat, l, re.I)), "")  # noqa: E731
+        prefs = store.prefs()
+        defaults = {
+            "first_name": name[0] if name else "", "last_name": " ".join(name[1:]) if len(name) > 1 else "",
+            "email": r.get("email", ""), "phone": r.get("phone", ""), "location": r.get("location", ""),
+            "linkedin": pick("linkedin"), "github": pick("github"),
+            "website": next((l for l in links if not re.search("linkedin|github", l, re.I)), ""),
+            "authorized_us": "", "needs_sponsorship": "Yes" if prefs.get("needs_sponsorship") else ("No" if prefs.get("needs_sponsorship") is False else ""),
+            "willing_relocate": "", "over_18": "Yes", "worked_here_before": "No", "remote_ok": "Yes",
+            "how_heard": "Company website", "salary": "", "start_date": "Two weeks after offer", "country": "United States",
+        }
+        return {**defaults, **{k: v for k, v in saved.items() if v not in (None,)}}
+
+    def save_apply_answers(self, answers):
+        store = self._store()
+        keep = {k: str(v).strip() for k, v in (answers or {}).items() if isinstance(v, (str, int, float, bool))}
+        Store.save(os.path.join(store.root, "apply_answers.json"), keep)
+        return {"ok": True, "message": "Application answers saved"}
+
+    def assisted_apply(self, job_id):
+        """Open the application form in Edge, fill it, attach files, and leave Submit to the person."""
+        def go():
+            from . import apply as ap
+            from .apply import Assistant
+            store = self._store()
+            job = next((r for r in store.jobs() if r["id"] == job_id), None)
+            if not job:
+                raise RuntimeError("Job not found.")
+            a = self.get_apply_answers()
+            need = [k for k in ("first_name", "last_name", "email", "phone") if not a.get(k)]
+            if need:
+                raise RuntimeError("Fill in your application answers first (My profile → Application answers): "
+                                   + ", ".join(need).replace("_", " "))
+            url, kind = job.get("url", ""), ap.detect(job.get("url", ""))
+            if kind not in ap.SUPPORTED:
+                direct, dkind = ap.find_direct(job.get("company", ""), job.get("title", ""))
+                if not direct:
+                    webbrowser.open(url)
+                    return (f"Opened the posting. {kind.title()} applications can't be filled automatically, and this "
+                            "job wasn't found on the company's own career site. Your tailored resume is in the job details.")
+                url, kind = direct, dkind
+            if not job.get("ats_pdf"):
+                self._runner.tailor_resume(job_id)
+                job = next((r for r in store.jobs() if r["id"] == job_id), job)
+            resume_path = os.path.join(store.root, job["ats_pdf"]) if job.get("ats_pdf") else ""
+            cover_text, cover_path = "", None
+            if job.get("draft"):
+                with open(os.path.join(store.root, job["draft"]), encoding="utf-8") as f:
+                    cover_text = ap.cover_letter_text(f.read())
+                cover_path = os.path.join(store.root, "resumes", f"Cover_Letter_{re.sub(r'[^A-Za-z0-9]+', '-', job['company'])[:40]}.pdf")
+                os.makedirs(os.path.dirname(cover_path), exist_ok=True)
+                ap.cover_letter_pdf(cover_text, cover_path)
+            browser_dir = os.path.join(os.environ.get("LOCALAPPDATA", cfg.CONFIG_DIR), "CareerPilot AI", "edge-profile")
+            os.makedirs(browser_dir, exist_ok=True)
+            res = Assistant(browser_dir, self._runner.log).open_and_fill(url, a, resume_path, cover_path, cover_text)
+            if res.get("error"):
+                raise RuntimeError("Couldn't fill the form: " + res["error"])
+            store.update_job(job_id, notes=((job.get("notes") or "") + f"\n[{dt.date.today()}] Assisted apply opened ({kind}).").strip())
+            msg = f"Edge is open with the {kind.title()} application: {res['filled']} fields filled"
+            if res["missing"]:
+                msg += f", {len(res['missing'])} question(s) need you"
+            return msg + ". Review it and click Submit, then mark the job Applied."
+        return self._bg("Filling application", go)
+
+    def tailor_resume(self, job_id):
+        return self._bg("Tailoring resume", lambda: self._runner.tailor_resume(job_id))
+
     def write_gap_plan(self, job_id):
         return self._bg("Skill-gap plan", lambda: self._runner.write_gap_plan(job_id))
 
@@ -164,9 +339,17 @@ class Api:
         jobs = store.jobs()
         today = dt.date.today().isoformat()
         active = [r for r in jobs if r.get("status") not in ("Rejected", "Skip")]
-        best = sorted([r for r in active if (r.get("match") or 0) >= 60 or (r.get("fit") or 0) >= 7],
+        for r in active:
+            if not r.get("exp_level"):
+                r["exp_level"], r["years"] = rules.experience_level(r.get("title", ""), r.get("level", ""),
+                                                                    store.descriptions().get(r["id"], ""))
+        best = sorted([r for r in active if ((r.get("match") or 0) >= 60 or (r.get("fit") or 0) >= 7)
+                       and r.get("exp_level") != "Experienced"],
                       key=lambda r: -((r.get("match") or 0) + (r.get("fit") or 0)))
         for r in best:
+            if not r.get("exp_level"):
+                r["exp_level"], r["years"] = rules.experience_level(r.get("title", ""), r.get("level", ""),
+                                                                    store.descriptions().get(r["id"], ""))
             r["outlook"] = outlook(r)
             r["h1b"] = r.get("h1b") or rules.h1b_label(r.get("company", ""))
         due, interviews = follow_ups(jobs)

@@ -92,6 +92,19 @@ class Store:
             d.update(mapping)
             self.save(self.desc_file, d)
 
+    def prefs(self):
+        """Per-profile job targets (set up in My profile)."""
+        p = self.load(os.path.join(self.root, "profile_settings.json"), {})
+        p.setdefault("target_roles", list(rules.DEFAULT_TARGET_ROLES))
+        p.setdefault("extra_titles", [])
+        p.setdefault("levels", ["entry", "associate", "mid"])
+        p.setdefault("remote_pref", "any")
+        p.setdefault("needs_sponsorship", None)  # None = use the global setting
+        return p
+
+    def save_prefs(self, prefs):
+        self.save(os.path.join(self.root, "profile_settings.json"), prefs)
+
     def profile(self):
         try:
             with open(self.profile_file, encoding="utf-8") as f:
@@ -106,7 +119,7 @@ class Store:
     # ------------------------------------------------------------ edits
     def update_job(self, job_id, **fields):
         allowed = {"status", "notes", "applied_on", "draft", "outreach", "interview_on", "follow_up_done",
-                   "gap_plan", "follow_up_notified", "interview_notified"}
+                   "gap_plan", "follow_up_notified", "interview_notified", "ats", "ats_docx", "ats_pdf"}
         with _lock:
             data = self.jobs()
             for r in data:
@@ -206,6 +219,8 @@ class Store:
                     "known_filer": "Yes" if rules.known_filer(company) else "",
                     "h1b": rules.h1b_label(company),
                     "opt": rules.opt_status(desc),
+                    "exp_level": rules.experience_level(title, j.get("experienceLevel") or "", desc)[0],
+                    "years": rules.experience_level(title, j.get("experienceLevel") or "", desc)[1],
                     "poster_name": j.get("posterFullName") or "", "poster_url": j.get("posterProfileUrl") or "",
                     "description": trimmed,
                 })
@@ -229,6 +244,7 @@ class Store:
                 rec["poster_name"], rec["poster_url"] = base.get("poster_name", ""), base.get("poster_url", "")
                 rec["h1b"] = base.get("h1b", "")
                 rec["opt"] = base.get("opt", "")
+                rec["exp_level"], rec["years"] = base.get("exp_level", ""), base.get("years")
                 rec.update({
                     "fit": jd.get("fit"), "fit_reason": jd.get("fit_reason", "") or ("" if jd else "Not scored yet"),
                     "work_setup": jd.get("work_setup") or base["hint_work_setup"],
@@ -309,7 +325,7 @@ class Store:
                     ("Title", "title", 44), ("Company", "company", 24), ("Location", "location", 20),
                     ("Work setup", "work_setup", 14), ("Sponsorship", "outlook", 12),
                     ("Sponsorship detail", "sponsorship_evidence", 50), ("Known H-1B filer", "known_filer", 9),
-                    ("Level", "level", 13), ("Type", "type", 11), ("Salary", "salary", 18),
+                    ("Level", "exp_level", 13), ("Years asked", "years", 8), ("Type", "type", 11), ("Salary", "salary", 18),
                     ("Posted", "posted", 11), ("Found", "found", 16), ("Cover letter", "draft", 14),
                     ("Applied on", "applied_on", 11), ("Notes", "notes", 30), ("Source", "source", 10),
                     ("Job ID", "id", 13)]

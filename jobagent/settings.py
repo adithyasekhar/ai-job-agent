@@ -6,7 +6,7 @@ import keyring
 
 APP_NAME = "AI Job Agent"
 DISPLAY_NAME = "CareerPilot AI"  # APP_NAME stays: it locates your existing settings and saved keys
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 CONFIG_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), APP_NAME)
 CONFIG_FILE = os.path.join(CONFIG_DIR, "settings.json")
 DEFAULT_DATA_DIR = os.path.join(os.path.expanduser("~"), "OneDrive", "Documents", APP_NAME)
@@ -35,6 +35,8 @@ DEFAULTS = {
     "sources_off": [],
     "gmail_address": "",
     "phone_access": False,
+    "profiles": {},
+    "active_profile": "",
     "alert_threshold": 8,
     "max_drafts_per_run": 3,
     "needs_sponsorship": True,
@@ -55,7 +57,18 @@ def load():
         pass
     if s.get("model") not in MODELS:
         s["model"] = DEFAULTS["model"]
+    # Each profile (person) has its own data folder; the active one is the data_dir everything uses.
+    profiles = dict(s.get("profiles") or {})
+    if not profiles:
+        profiles = {"My profile": s["data_dir"]}
+    if s.get("active_profile") not in profiles:
+        s["active_profile"] = next(iter(profiles))
+    s["profiles"] = profiles
+    s["data_dir"] = profiles[s["active_profile"]]
     return s
+
+
+PROFILES_ROOT = os.path.join(os.path.dirname(DEFAULT_DATA_DIR), "CareerPilot AI", "profiles")
 
 
 def save(s):

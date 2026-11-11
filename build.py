@@ -42,6 +42,8 @@ def main():
          "--hidden-import", "pystray._win32",
          "--hidden-import", "qrcode.image.pil",
          "--collect-submodules", "webview",
+         "--collect-data", "playwright", "--collect-submodules", "playwright",  # driver for assisted apply (uses installed Edge)
+         "--collect-data", "docx",  # Word templates for resume export
          os.path.join(HERE, "main.py")])
 
     if "--zip" in sys.argv:

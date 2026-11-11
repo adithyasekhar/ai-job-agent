@@ -207,6 +207,7 @@ const REMOTE = !!window.CAREERPILOT_REMOTE;   // opened from a phone over Wi-Fi
 const ICON = d => `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const NAV = [
   ["dashboard", "Dashboard", '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>', null],
+  ["profile", "My profile", '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>', null],
   ["all", "Job search", '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>', "c-all"],
   ["top", "Top matches", '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>', "c-top"],
   ["pipeline", "Applications", '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>', "c-pipe"],
@@ -219,20 +220,23 @@ const NAV = [
 const matchOf = j => j.match ?? (j.fit != null && j.fit !== "" ? j.fit * 10 : null);
 function matchHtml(j){ const m = matchOf(j); if (m == null) return '<span class="match">–</span>';
   return `<span class="match ${m>=75?"hi":m>=55?"mid":""}" title="${j.fit!=null&&j.fit!==""?"AI fit "+j.fit+"/10 + meaning-based match":"Meaning-based match (AI score pending)"}">${m}%</span>`; }
-function isTop(j){ return ((j.fit||0) >= 7 || (matchOf(j)||0) >= 75) && !["Rejected","Skip"].includes(j.status); }
-const filt = {q:"", setup:"", spons:"", source:"", minfit:"", hideClosed:true};
+function isTop(j){ return ((j.fit||0) >= 7 || (matchOf(j)||0) >= 75) && !["Rejected","Skip"].includes(j.status) && j.exp_level !== "Experienced"; }
+const filt = {q:"", setup:"", spons:"", source:"", minfit:"", level:"", hideClosed:true};
 let lastTask = "", lastRunning = false, pendingOpen = null;
 
 function toast(msg, ms=3200){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"), ms); }
 function fitCls(f){ return f>=8?"hi":f>=6?"mid":""; }
 function spPill(o){ return {Good:'<span class="pill good">Sponsors</span>',Likely:'<span class="pill good">H-1B likely</span>',Possible:'<span class="pill warn">Possible</span>',No:'<span class="pill bad">No sponsorship</span>'}[o] || '<span class="pill">Unknown</span>'; }
+function levelPill(j){ const l = j.exp_level || "Not stated", y = j.years != null && j.years !== "" ? ` · ${j.years}+ yrs` : "";
+  const cls = {Internship:"info", Entry:"good", Intermediate:"warn", Experienced:"bad"}[l] || "";
+  return `<span class="pill ${cls}" title="Experience level${y ? " (posting asks for " + j.years + "+ years)" : ""}">${esc(l === "Not stated" ? "Level ?" : l)}${y}</span>`; }
 function setupPill(w){ return w==="Remote"?'<span class="pill good">Remote</span>':w==="Possibly remote"?'<span class="pill good">Maybe remote</span>':w==="Hybrid"?'<span class="pill info">Hybrid</span>':w==="On-site"?'<span class="pill">On-site</span>':'<span class="pill">—</span>'; }
 function rel(iso){ if(!iso) return "never"; const d=(Date.now()-new Date(iso))/60000; if(d<1) return "just now"; if(d<60) return Math.round(d)+" min ago"; if(d<1440) return Math.round(d/60)+" h ago"; return Math.round(d/1440)+" d ago"; }
 
 async function boot(){
   api = window.pywebview.api;
   if (REMOTE) api.open_url = async url => { window.open(url, "_blank"); return true; };
-  $("#nav").innerHTML = NAV.filter(([v]) => !(REMOTE && v === "settings")).map(([v, label, icon, cid]) =>
+  $("#nav").innerHTML = NAV.filter(([v]) => !(REMOTE && (v === "settings" || v === "profile"))).map(([v, label, icon, cid]) =>
     `<button data-view="${v}" class="${v===view?"on":""}">${ICON(icon)}<span class="lbl">${label}</span>${cid?`<span class="count" id="${cid}">0</span>`:""}</button>`).join("");
   document.querySelectorAll("#nav button").forEach(b => b.onclick = () => go(b.dataset.view));
   $("#runBtn").onclick = async () => {
@@ -259,7 +263,7 @@ async function poll(){
   if ((lastRunning || lastTask) && !busy) {           // a task just finished
     if (state.task_result) toast(state.task_result, 5000);
     const reopen = pendingOpen && selected === pendingOpen ? pendingOpen : null; pendingOpen = null;
-    await refreshJobs(); if (["dashboard","top","all","pipeline","drafts","contacts","learning"].includes(view)) render();
+    await refreshJobs(); if (["profile","dashboard","top","all","pipeline","drafts","contacts","learning"].includes(view)) render();
     if (reopen && view !== "drafts") openJob(reopen);
   }
   if (view === "activity") { const l=$("#livelog"); if(l){ const atEnd=l.scrollTop+l.clientHeight>=l.scrollHeight-20; l.textContent = state.lines.join("\n") || "No run yet in this session."; if(atEnd) l.scrollTop=l.scrollHeight; } }
@@ -283,10 +287,11 @@ function tickStatus(){
   s2.textContent = "Every " + state.interval + " min · last run " + rel(state.last_success);
 }
 function go(v){ view=v; document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("on", b.dataset.view===v)); closeDrawer(); render(); $("#main").scrollTop=0; }
-function render(){ ({dashboard:renderDashboard, top:renderJobs, all:renderJobs, pipeline:renderJobs, contacts:renderContacts, learning:renderLearning, drafts:renderDrafts, activity:renderActivity, settings:renderSettings})[view](); }
+function render(){ ({profile:renderProfile, dashboard:renderDashboard, top:renderJobs, all:renderJobs, pipeline:renderJobs, contacts:renderContacts, learning:renderLearning, drafts:renderDrafts, activity:renderActivity, settings:renderSettings})[view](); }
 
 /* ---------------- jobs ---------------- */
 function banner(){
+  if (!state.has_resume && !REMOTE) return `<div class="banner">Upload your resume so CareerPilot can find matching jobs, tailor your resume for each one and fill applications. <button class="btn small" onclick="go('profile')">Add resume</button></div>`;
   if (state.profile_blank) return `<div class="banner">Add your resume summary under Settings → Your profile so jobs are scored against your background. <button class="btn small" onclick="go('settings')">Open profile</button></div>`;
   if (state.ai_label) return "";
   return `<div class="banner">No AI is available, so jobs are scored with free keyword matching and cover letters are off. Open the Ollama app (free, local) or add a free Gemini key. <button class="btn small" onclick="go('settings')">AI settings</button></div>`;
@@ -326,13 +331,14 @@ function visibleJobs(){
   if (filt.setup) list = list.filter(j => filt.setup==="Remote" ? ["Remote","Possibly remote"].includes(j.work_setup) : j.work_setup===filt.setup);
   if (filt.spons) list = list.filter(j => filt.spons==="ok" ? ["Good","Possible"].includes(j.outlook) : j.outlook===filt.spons);
   if (filt.source) list = list.filter(j => j.source===filt.source);
+  if (filt.level) list = list.filter(j => filt.level === "entry+" ? ["Internship","Entry"].includes(j.exp_level) : filt.level === "upto-mid" ? ["Internship","Entry","Intermediate"].includes(j.exp_level) : j.exp_level === filt.level);
   if (filt.minfit) list = list.filter(j => (j.fit||0) >= +filt.minfit);
   const val = j => sortKey==="match" ? (matchOf(j)??-1) : sortKey==="fit" ? (j.fit??-1) : sortKey==="found" ? (j.found||"") : String(j[sortKey]||"").toLowerCase();
   list.sort((a,b) => { const x=val(a), y=val(b); if (x<y) return -sortDir; if (x>y) return sortDir; return (b.found||"").localeCompare(a.found||""); });
   return list;
 }
 function renderJobs(){
-  const titles = {top:["Top matches","Match 75%+ or AI fit 7+, not skipped or rejected."],
+  const titles = {top:["Top matches","Match 75%+ or AI fit 7+, internship to intermediate level, not skipped or rejected."],
                   all:["Job search","Every job the agent has found. Search, filter and sort."],
                   pipeline:["Applications","Jobs you marked Interested, Applied, Interview or Offer."]};
   const [h, sub] = titles[view];
@@ -355,6 +361,7 @@ function renderJobs(){
       <input type="search" class="field" id="q" placeholder="Search title, company, notes…" value="${esc(filt.q)}">
       <select class="field" id="f-setup"><option value="">Any work setup</option><option>Remote</option><option>Hybrid</option><option>On-site</option></select>
       <select class="field" id="f-spons"><option value="">Any sponsorship</option><option value="ok">Sponsors or possible</option><option value="Good">Sponsors</option><option value="No">No sponsorship</option><option value="Unknown">Unknown</option></select>
+      <select class="field" id="f-level"><option value="">Any level</option><option value="entry+">Internship + Entry</option><option value="upto-mid">Up to Intermediate</option><option>Internship</option><option>Entry</option><option>Intermediate</option><option>Experienced</option><option>Not stated</option></select>
       <select class="field" id="f-source"><option value="">All sources</option>${sources.map(s=>`<option>${esc(s)}</option>`).join("")}</select>
       <select class="field" id="f-fit"><option value="">Any fit</option><option value="8">Fit 8+</option><option value="6">Fit 6+</option><option value="4">Fit 4+</option></select>
       ${view==="all" ? `<label class="check" style="margin:0 6px"><input type="checkbox" id="f-closed" ${filt.hideClosed?"checked":""}> Hide skipped/rejected</label>` : ""}
@@ -362,6 +369,7 @@ function renderJobs(){
       ${unscored && view==="all" ? `<button class="btn" onclick="scoreUnscored()">Score ${unscored} unscored</button>` : ""}
     </div>
     <div class="card" id="tablecard"></div>`;
+  $("#f-level").value=filt.level; $("#f-level").onchange = e => { filt.level = e.target.value; drawTable(); };
   $("#f-setup").value=filt.setup; $("#f-spons").value=filt.spons; $("#f-source").value=filt.source; $("#f-fit").value=filt.minfit;
   $("#q").oninput = e => { filt.q=e.target.value; drawTable(); };
   ["setup","spons","source","fit"].forEach(k => $("#f-"+k).onchange = e => { filt[k==="fit"?"minfit":k]=e.target.value; drawTable(); });
@@ -377,7 +385,7 @@ function drawTable(){
   $("#tablecard").innerHTML = `<table><thead><tr>${th("match","Match")}${th("title","Job")}${th("work_setup","Setup")}${th("outlook","Sponsorship")}${th("source","Source")}${th("found","Found")}${th("status","Status")}</tr></thead>
   <tbody>${list.map(j => `<tr class="row ${selected===j.id?"sel":""}" data-id="${esc(j.id)}">
     <td>${matchHtml(j)}</td>
-    <td><div class="t1">${esc(j.title)}${j.draft?' <span class="pill info" title="Cover letter ready">✎</span>':""}</div><div class="t2">${esc(j.company)} · ${esc(j.location)}${j.salary?" · "+esc(j.salary):""}</div></td>
+    <td><div class="t1">${esc(j.title)}${j.draft?' <span class="pill info" title="Cover letter ready">✎</span>':""}</div><div class="t2">${levelPill(j)} ${esc(j.company)} · ${esc(j.location)}${j.salary?" · "+esc(j.salary):""}</div></td>
     <td>${setupPill(j.work_setup)}</td><td>${spPill(j.outlook)}</td>
     <td class="t2">${esc(j.source||"")}</td><td class="t2">${esc((j.found||"").slice(5,16))}</td>
     <td><select class="status-sel" data-id="${esc(j.id)}">${STATUSES.map(s=>`<option ${s===(j.status||"New")?"selected":""}>${s}</option>`).join("")}</select></td>
@@ -411,6 +419,7 @@ async function openJob(id){
       <div class="kv">
         <div>Match</div><div>${matchHtml(j)} <span class="t2">${j.fit!=null&&j.fit!==""?"AI fit "+j.fit+"/10":"AI score pending"}${j.semantic!=null?" · meaning match "+j.semantic+"%":""}</span></div>
         <div>Status</div><div><select class="status-sel" id="d-status">${STATUSES.map(s=>`<option ${s===(j.status||"New")?"selected":""}>${s}</option>`).join("")}</select></div>
+        <div>Experience</div><div>${levelPill(j)} ${j.years!=null&&j.years!==""?'<span class="t2">posting asks for '+j.years+'+ years</span>':'<span class="t2">years not stated</span>'}</div>
         <div>Work setup</div><div>${setupPill(j.work_setup)}</div>
         <div>Sponsorship</div><div>${spPill(j.outlook)}</div>
         <div>OPT / CPT</div><div>${j.opt==="Welcome"?'<span class="pill good">OPT/CPT welcome</span>':j.opt==="Not accepted"?'<span class="pill bad">Not accepted</span>':'<span class="t2">Not mentioned</span>'}</div>
@@ -422,6 +431,20 @@ async function openJob(id){
       </div>
       ${j.fit_reason ? `<div class="label">Why it fits</div><div class="box">${esc(j.fit_reason)}</div>` : ""}
       ${j.sponsorship_evidence ? `<div class="label">Sponsorship wording</div><div class="box quote">“${esc(j.sponsorship_evidence)}”</div>` : ""}
+      <div class="label">Resume & apply</div>
+      <div class="box">
+        ${j.ats ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t1">ATS match</span>
+            <span class="match">${j.ats.before}%</span> → <span class="match ${j.ats.after>=90?"hi":j.ats.after>=70?"mid":""}">${j.ats.after}%</span>
+            ${REMOTE ? "" : `<button class="btn small" onclick="api.open_path('${esc((j.ats_docx||"").replace(/\\/g,"/"))}')">Open Word</button><button class="btn small" onclick="api.open_path('${esc((j.ats_pdf||"").replace(/\\/g,"/"))}')">Open PDF</button>`}</div>
+          ${j.ats.missing && j.ats.missing.length ? `<div class="t2" style="margin-top:6px">Not in your resume (left out, never invented): ${j.ats.missing.map(esc).join(", ")}</div>` : '<div class="t2" style="margin-top:6px">Every keyword from the posting is covered.</div>'}`
+        : '<div class="t2">Tailor your resume to this posting: keywords surfaced, bullets reworded, nothing invented. Word and PDF are saved.</div>'}
+        <div class="actions" style="margin-top:8px">
+          <button class="btn small" id="tailorBtn" ${state.ai_label && state.has_resume ? "" : "disabled title='Needs your resume and an AI option'"}>${j.ats ? "Re-tailor resume" : "Tailor my resume (ATS)"}</button>
+          ${REMOTE ? "" : `<button class="btn small primary" id="applyBtn" ${state.has_resume ? "" : "disabled"}>${/greenhouse|lever\.co|ashbyhq/i.test(j.url||"") ? "Fill application" : "Find on company site & fill"}</button>`}
+          ${j.status !== "Applied" ? `<button class="btn small" id="markApplied">I submitted it: mark Applied</button>` : ""}
+        </div>
+        <div class="t2" style="margin-top:6px">The app fills the form in Edge and stops. You review and click Submit. LinkedIn, Indeed and Dice are never automated.</div>
+      </div>
       <div class="label">People to contact</div>${peopleHtml(j)}
       <div class="actions" style="margin-top:10px"><button class="btn small" id="outreachBtn" ${state.ai_label?"":"disabled"}>${j.outreach ? "Rewrite outreach notes" : "Draft outreach notes"}</button></div>
       ${j.outreach ? `<div class="box" id="outreachBox">${md(j.outreach)}<button class="btn small" id="copyOutreach">Copy notes</button></div>` : ""}
@@ -441,6 +464,9 @@ async function openJob(id){
   $("#d-notes").onchange = async e => { await api.update_job(id, {notes:e.target.value}); j.notes=e.target.value; toast("Notes saved"); };
   $("#d-applied").onchange = async e => { await api.update_job(id, {applied_on:e.target.value}); j.applied_on=e.target.value; toast("Saved"); };
   if ($("#draftBtn")) $("#draftBtn").onclick = async () => { const r = await api.write_draft(id); pendingOpen = id; toast(r.ok ? "Writing the cover letter… this can take a minute." : r.message, 4000); poll(); };
+  if ($("#tailorBtn")) $("#tailorBtn").onclick = async () => { const r = await api.tailor_resume(id); toast(r.ok ? "Tailoring your resume… about 1–2 minutes with local AI." : r.message, 4500); pendingOpen = id; poll(); };
+  if ($("#applyBtn")) $("#applyBtn").onclick = async () => { const r = await api.assisted_apply(id); toast(r.ok ? "Opening the application in Edge… (it tailors your resume first if needed)" : r.message, 5000); pendingOpen = id; poll(); };
+  if ($("#markApplied")) $("#markApplied").onclick = () => setStatus(id, "Applied");
   $("#gapBtn").onclick = async () => { const r = await api.write_gap_plan(id); toast(r.ok ? "Writing the skill-gap plan…" : r.message, 4000); pendingOpen = id; poll(); };
   $("#d-interview").onchange = async e => { await api.update_job(id, {interview_on:e.target.value}); j.interview_on=e.target.value; toast("Interview date saved: you'll get a reminder the day before"); };
   if ($("#d-fudone")) $("#d-fudone").onchange = async e => { await api.update_job(id, {follow_up_done:e.target.checked ? new Date().toISOString().slice(0,10) : ""}); toast("Saved"); };
@@ -451,11 +477,99 @@ async function openJob(id){
 function closeDrawer(){ $("#drawer").classList.remove("open"); selected=null; document.querySelectorAll("tr.row.sel").forEach(r=>r.classList.remove("sel")); }
 document.addEventListener("keydown", e => { if (e.key==="Escape") closeDrawer(); });
 
+/* ---------------- my profile ---------------- */
+async function renderProfile(){
+  const P = await api.get_profiles(), A = await api.get_apply_answers();
+  const r = P.resume, pr = P.prefs;
+  const yn = (id, v, label) => `<div class="frow"><label>${label}</label><select class="field" id="${id}">${["", "Yes", "No"].map(o => `<option ${String(v)===o?"selected":""} value="${o}">${o || "Ask me (leave unanswered)"}</option>`).join("")}</select></div>`;
+  const inp = (id, v, label, ph = "") => `<div class="frow"><label>${label}</label><input class="field" id="${id}" value="${esc(v||"")}" placeholder="${esc(ph)}"></div>`;
+  const ex = (r && r.experience) || [], pj = (r && r.projects) || [], ed = (r && r.education) || [];
+  const expRows = [0,1,2].map(i => `<div class="card sect" style="padding:12px;margin:8px 0;box-shadow:none">
+      <div class="grid2" style="gap:8px">${inp("ex"+i+"t", ex[i]?.title, "Title")}${inp("ex"+i+"c", ex[i]?.company, "Company")}</div>${inp("ex"+i+"d", ex[i]?.dates, "Dates", "May 2025 – Aug 2025")}
+      <textarea class="field" id="ex${i}b" placeholder="One achievement per line">${esc((ex[i]?.bullets||[]).join("\n"))}</textarea></div>`).join("");
+  const pjRows = [0,1,2].map(i => `<div class="card sect" style="padding:12px;margin:8px 0;box-shadow:none">
+      <div class="grid2" style="gap:8px">${inp("pj"+i+"n", pj[i]?.name, "Project")}${inp("pj"+i+"t", pj[i]?.tech, "Tech used")}</div>
+      <textarea class="field" id="pj${i}b" placeholder="What you built and the result, one per line">${esc((pj[i]?.bullets||[]).join("\n"))}</textarea></div>`).join("");
+  const edRows = [0,1].map(i => `<div class="grid2" style="gap:8px">${inp("ed"+i+"d", ed[i]?.degree, "Degree")}${inp("ed"+i+"s", ed[i]?.school, "School")}${inp("ed"+i+"y", ed[i]?.dates, "Dates")}${inp("ed"+i+"x", ed[i]?.details, "Details", "GPA, honors")}</div>`).join("");
+  $("#view").innerHTML = `<h1>My profile</h1><p class="sub">Your resume, the jobs you want, and the answers used to fill applications. Each profile has its own jobs, scores and files.</p>
+  <div class="card sect" style="margin-bottom:16px"><h3>Profile</h3>
+    <div class="frow"><label>Active profile</label><select class="field" id="pfSel">${P.profiles.map(p => `<option ${p.name===P.active?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div>
+    <div class="frow"><label>New profile</label><input class="field" id="pfNew" placeholder="e.g. Alex – AI Engineer"><button class="btn small" id="pfAdd">Create</button></div>
+    <div class="t2">${P.profiles.map(p => `${esc(p.name)}: ${p.jobs} jobs`).join(" · ")}</div>
+  </div>
+  <div class="grid2">
+    <div class="card sect"><h3>Resume</h3>
+      ${r ? `<div class="t1" style="font-size:16px">${esc(r.name||"")}</div><div class="t2">${esc([r.email, r.phone, r.location].filter(Boolean).join(" · "))}</div>
+        <div style="margin:10px 0">${(r.skills||[]).slice(0,30).map(k => `<span class="pill info" style="margin:2px">${esc(k)}</span>`).join("")}</div>
+        <div class="t2">${ex.length} jobs · ${pj.length} projects · ${ed.length} education entries${r.raw_text ? " · saved as plain text (no AI was available to read it)" : ""}</div>`
+        : '<p class="hint">No resume in this profile yet. Upload one (Word, PDF or text), or fill in the form below if you don\'t have a resume.</p>'}
+      <div class="actions" style="margin-top:10px"><button class="btn primary" id="upBtn">${r ? "Upload a new resume" : "Upload resume"}</button><button class="btn" id="formBtn">${r ? "Edit with the form" : "No resume? Fill the form"}</button></div>
+      <p class="t2">Reading a resume takes about a minute with the free local AI. Everything stays on your PC.</p>
+    </div>
+    <div class="card sect"><h3>Jobs you want</h3>
+      <div class="label">Target roles (one per line): used for searching and matching</div>
+      <textarea class="field" id="pfRoles" style="min-height:120px;margin-top:6px">${esc((pr.target_roles||[]).join("\n"))}</textarea>
+      <div class="label">Also keep these titles (optional)</div>
+      <input class="field" id="pfExtra" style="width:100%;margin-top:6px" value="${esc((pr.extra_titles||[]).join(", "))}" placeholder="e.g. data engineer, analytics engineer">
+      <div class="frow"><label>Work setup</label><select class="field" id="pfRemote">${["any","remote","hybrid","on-site"].map(o => `<option ${pr.remote_pref===o?"selected":""}>${o}</option>`).join("")}</select></div>
+      <div class="frow"><label>Visa sponsorship needed</label><select class="field" id="pfSpons"><option value="">Use the Settings choice</option><option value="yes" ${pr.needs_sponsorship===true?"selected":""}>Yes</option><option value="no" ${pr.needs_sponsorship===false?"selected":""}>No</option></select></div>
+      <button class="btn primary" id="pfSave" style="margin-top:8px">Save targets</button>
+    </div>
+  </div>
+  <div class="card sect" id="formCard" style="margin-top:16px;display:none"><h3>Build your resume</h3>
+    <p class="hint">Only real experience. Class projects, internships, research and hackathons all count.</p>
+    <div class="grid2" style="gap:8px">${inp("fName", r?.name, "Full name")}${inp("fEmail", r?.email, "Email")}${inp("fPhone", r?.phone, "Phone")}${inp("fLoc", r?.location, "City, State")}</div>
+    ${inp("fHead", r?.headline, "Headline", "Machine Learning Engineer")}
+    <div class="label">Links (one per line)</div><textarea class="field" id="fLinks" placeholder="linkedin.com/in/you&#10;github.com/you">${esc((r?.links||[]).join("\n"))}</textarea>
+    <div class="label">Summary</div><textarea class="field" id="fSum">${esc(r?.summary||"")}</textarea>
+    <div class="label">Skills (comma separated)</div><textarea class="field" id="fSkills">${esc((r?.skills||[]).join(", "))}</textarea>
+    <div class="label">Experience</div>${expRows}<div class="label">Projects</div>${pjRows}<div class="label">Education</div>${edRows}
+    <div class="label">Certifications (one per line)</div><textarea class="field" id="fCerts">${esc((r?.certifications||[]).join("\n"))}</textarea>
+    <button class="btn primary" id="fSave" style="margin-top:10px">Save resume</button>
+  </div>
+  <div class="card sect" style="margin-top:16px"><h3>Application answers</h3>
+    <p class="hint">Used to fill application forms. Leave a question on "Ask me" and the app leaves it for you to answer on the form.</p>
+    <div class="grid2" style="gap:0 16px">
+      <div>${inp("aFirst", A.first_name, "First name")}${inp("aLast", A.last_name, "Last name")}${inp("aEmail", A.email, "Email")}${inp("aPhone", A.phone, "Phone")}${inp("aLoc", A.location, "City, State")}${inp("aCountry", A.country, "Country")}${inp("aLinked", A.linkedin, "LinkedIn URL")}${inp("aGit", A.github, "GitHub URL")}${inp("aWeb", A.website, "Website / portfolio")}</div>
+      <div>${yn("aAuth", A.authorized_us, "Authorized to work in the US?")}${yn("aSpons", A.needs_sponsorship, "Need visa sponsorship now or later?")}${yn("aReloc", A.willing_relocate, "Willing to relocate?")}${yn("aRemote", A.remote_ok, "OK with on-site / hybrid?")}${yn("a18", A.over_18, "18 or older?")}${yn("aBefore", A.worked_here_before, "Worked at the company before?")}
+        ${inp("aSalary", A.salary, "Salary expectation", "Leave blank to answer per job")}${inp("aStart", A.start_date, "Start date / notice")}${inp("aHeard", A.how_heard, "How did you hear")}</div>
+    </div>
+    <p class="t2">Demographic questions (gender, race, veteran, disability) are always answered "Decline to self-identify". You can change them on the form.</p>
+    <button class="btn primary" id="aSave">Save answers</button>
+  </div>`;
+  $("#pfSel").onchange = async e => { await api.switch_profile(e.target.value); state = await api.get_state(); await refreshJobs(); toast("Switched to " + e.target.value); renderProfile(); };
+  $("#pfAdd").onclick = async () => { const r2 = await api.create_profile($("#pfNew").value); if (r2.ok === false) return toast(r2.message); state = await api.get_state(); await refreshJobs(); toast("Profile created: now upload a resume"); renderProfile(); };
+  $("#upBtn").onclick = async () => { const path = await api.pick_resume_file(); if (!path) return; const r2 = await api.import_resume(path); toast(r2.ok ? "Reading your resume… about a minute." : r2.message, 5000); poll(); };
+  $("#formBtn").onclick = () => { const c = $("#formCard"); c.style.display = c.style.display === "none" ? "" : "none"; c.scrollIntoView({behavior:"smooth"}); };
+  $("#pfSave").onclick = async () => {
+    const sp = $("#pfSpons").value;
+    await api.save_prefs({target_roles: $("#pfRoles").value.split("\n"), extra_titles: $("#pfExtra").value.split(","), remote_pref: $("#pfRemote").value, ...(sp ? {needs_sponsorship: sp === "yes"} : {})});
+    toast("Targets saved: the next run searches for these roles");
+  };
+  $("#fSave").onclick = async () => {
+    const v = id => ($("#" + id)?.value || "").trim();
+    const form = {name: v("fName"), email: v("fEmail"), phone: v("fPhone"), location: v("fLoc"), headline: v("fHead"), links: v("fLinks"),
+      summary: v("fSum"), skills: v("fSkills"), certifications: v("fCerts"),
+      experience: [0,1,2].map(i => ({title: v("ex"+i+"t"), company: v("ex"+i+"c"), dates: v("ex"+i+"d"), bullets: v("ex"+i+"b")})),
+      projects: [0,1,2].map(i => ({name: v("pj"+i+"n"), tech: v("pj"+i+"t"), bullets: v("pj"+i+"b")})),
+      education: [0,1].map(i => ({degree: v("ed"+i+"d"), school: v("ed"+i+"s"), dates: v("ed"+i+"y"), details: v("ed"+i+"x")}))};
+    const r2 = await api.save_resume_form(form); toast(r2.message); if (r2.ok) { state = await api.get_state(); renderProfile(); }
+  };
+  $("#aSave").onclick = async () => {
+    const v = id => ($("#" + id)?.value || "").trim();
+    const r2 = await api.save_apply_answers({first_name: v("aFirst"), last_name: v("aLast"), email: v("aEmail"), phone: v("aPhone"), location: v("aLoc"),
+      country: v("aCountry"), linkedin: v("aLinked"), github: v("aGit"), website: v("aWeb"), authorized_us: v("aAuth"), needs_sponsorship: v("aSpons"),
+      willing_relocate: v("aReloc"), remote_ok: v("aRemote"), over_18: v("a18"), worked_here_before: v("aBefore"), salary: v("aSalary"),
+      start_date: v("aStart"), how_heard: v("aHeard")});
+    toast(r2.message);
+  };
+}
+
 /* ---------------- dashboard ---------------- */
 function hello(){ const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; }
 function initials(c){ return esc((c||"?").replace(/[^A-Za-z0-9 ]/g,"").split(" ").filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase() || "?"); }
 function jobRow(j){
-  const tags = [j.work_setup==="Remote"?"Remote":"", ["Good","Likely"].includes(j.outlook)?"H-1B friendly":"", j.opt==="Welcome"?"OPT/CPT":""].filter(Boolean).join(" · ");
+  const tags = [j.exp_level && j.exp_level!=="Not stated" ? j.exp_level : "", j.work_setup==="Remote"?"Remote":"", ["Good","Likely"].includes(j.outlook)?"H-1B friendly":"", j.opt==="Welcome"?"OPT/CPT":""].filter(Boolean).join(" · ");
   return `<div class="jrow" data-id="${esc(j.id)}"><div class="logo">${initials(j.company)}</div>
     <div style="flex:1;min-width:0"><div class="t1" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(j.title)}</div>
     <div class="t2">${esc(j.company)} · ${esc((j.location||"").slice(0,40))}${tags?" · "+esc(tags):""}</div></div>${matchHtml(j)}</div>`;

@@ -6,10 +6,10 @@ and outreach notes, reminds you to follow up, and works on your phone over Wi-Fi
 with Ollama the AI runs on your PC for free.
 
 ## Download
-1. Go to [Releases](../../releases/latest) and download `CareerPilot-AI-v2.0.0-windows.zip`.
+1. Go to [Releases](../../releases/latest) and download `CareerPilot-AI-v2.1.0-windows.zip`.
 2. Unzip it anywhere, open the `CareerPilot AI` folder and double-click **CareerPilot AI.exe**.
    Windows may show "Windows protected your PC" because the app isn't code-signed: click **More info → Run anyway**.
-3. Open **Settings**: fill in **Your profile** (your resume summary) and pick an AI option.
+3. Open **My profile**: upload your resume (Word or PDF) or fill in the form, check your target roles, and save your application answers. Pick an AI option in **Settings**.
 4. For free, private AI install [Ollama](https://ollama.com), then run:
    ```
    ollama pull gemma4
@@ -20,6 +20,17 @@ Requires Windows 10 or 11 (64-bit) with the Microsoft Edge WebView2 runtime (inc
 Upgrading from AI Job Agent v1.x: your jobs, settings and keys carry over automatically.
 
 ## What it does
+- **Built for early-career AI engineers:** upload your resume and CareerPilot searches for your target roles
+  (AI/ML Engineer, LLM, GenAI, Data Scientist, MLOps… editable), scores every job against your resume, and labels
+  each one Internship / Entry / Intermediate / Experienced with the years of experience it asks for.
+- **ATS resume tailoring:** for any job, your resume is rewritten for that posting and scored before and after.
+  Keywords you genuinely have are surfaced and bullets reworded; anything not in your resume is listed as missing,
+  never invented. Saved as an ATS-safe Word file and PDF.
+- **Assisted apply:** on Greenhouse, Lever and Ashby forms (most company career sites) the app opens the
+  application in Microsoft Edge, fills in your details and screening answers, attaches the tailored resume and
+  cover letter, highlights questions only you can answer, and stops. You review and click Submit. For jobs found on
+  LinkedIn, Indeed or Dice it looks for the same job on the company's own site; those sites are never automated.
+- **Profiles:** each person has their own resume, targets, jobs and files.
 - **Dashboard:** greeting, jobs indexed, best matches, new today, applications, top matches, follow-ups,
   skills to learn and new jobs this week.
 - **Finds jobs** from free sources: Hacker News "Who is hiring", 25 big-employer Workday career sites (NVIDIA,
@@ -74,6 +85,9 @@ not part of this repository. Start from [profile.example.md](profile.example.md)
 - `jobagent/ai.py`: Claude, Gemini, Ollama and keyword scoring; drafts, outreach and skill-gap plans
 - `jobagent/rules.py`: sponsorship, OPT/CPT, remote, seniority, relevance, H-1B records, skill gaps
 - `jobagent/tracker.py`: storage, follow-ups and Excel export
+- `jobagent/resume.py`: resume import and the guided form
+- `jobagent/ats.py`: ATS scoring, truthful tailoring, Word/PDF export
+- `jobagent/apply.py`: assisted apply in Edge (Greenhouse, Lever, Ashby)
 - `jobagent/remote.py`: phone access over Wi-Fi
 - `jobagent/ui/index.html`: the interface
 - `build.py`: PyInstaller build and install
