@@ -213,3 +213,47 @@ def h1b_label(company):
 def known_filer(company):  # noqa: F811 - replaces the hand-made list with USCIS records, list as fallback
     rec = h1b_record(company)
     return bool(rec and sum(rec) >= 5) or (company or "").strip().lower() in PAST_H1B_FILERS
+
+
+
+# ---------------------------------------------------------------- OPT / CPT (student work authorization)
+_OPT_NO = re.compile(r"(no|not|without|unable to (?:accept|consider))[^.\n]{0,25}\b(opt|cpt|stem opt|f-?1)\b|"
+                     r"\b(opt|cpt|f-?1)\b[^.\n]{0,30}(not (?:accepted|eligible|considered)|ineligible)", re.I)
+_OPT_YES = re.compile(r"\b(stem opt|opt|cpt|f-?1)\b(?![- ]?out)[^.\n]{0,40}(welcome|accepted|eligible|encouraged|ok\b|considered)|"
+                      r"(accept|welcome|consider)[^.\n]{0,25}\b(stem opt|opt|cpt)\b(?![- ]?out)", re.I)
+
+
+def opt_status(desc):
+    """'Not accepted', 'Welcome' or '' (not mentioned) for OPT/CPT candidates."""
+    if _OPT_NO.search(desc or ""):
+        return "Not accepted"
+    if _OPT_YES.search(desc or ""):
+        return "Welcome"
+    return ""
+
+
+# ---------------------------------------------------------------- skills seen in job postings (for gap analysis)
+SKILL_TERMS = {
+    "Python": r"python", "SQL": r"sql", "Java": r"java(?!script)", "JavaScript/TypeScript": r"javascript|typescript",
+    "React": r"react", "Node.js": r"node\.?js", "PyTorch": r"pytorch", "TensorFlow": r"tensorflow",
+    "scikit-learn": r"scikit|sklearn", "pandas": r"pandas", "Spark": r"spark", "LangChain/LangGraph": r"langchain|langgraph",
+    "RAG / vector databases": r"\brag\b|vector (?:db|database|store)|pinecone|weaviate|chroma",
+    "Prompt engineering": r"prompt engineering", "LLM APIs (OpenAI/Anthropic)": r"openai|anthropic|claude|gpt-?4|llm api",
+    "Fine-tuning": r"fine-?tun", "MLOps": r"mlops|mlflow|kubeflow", "Docker": r"docker", "Kubernetes": r"kubernetes|k8s",
+    "AWS": r"\baws\b|amazon web services", "Azure": r"azure", "GCP": r"\bgcp\b|google cloud", "Databricks": r"databricks",
+    "Snowflake": r"snowflake", "dbt": r"\bdbt\b", "Airflow": r"airflow", "Tableau/Power BI": r"tableau|power bi",
+    "Statistics": r"statistic", "REST APIs": r"rest(?:ful)? api", "Workday": r"workday", "ServiceNow": r"servicenow",
+    "Salesforce": r"salesforce", "Git": r"\bgit\b|github", "CI/CD": r"ci/cd|continuous integration",
+}
+
+
+def skill_gaps(profile, job_texts, top=12):
+    """Skills that job postings ask for but the profile doesn't list: [(skill, how many jobs)]."""
+    known = re.split(r"#+\s*gaps", profile or "", flags=re.I)[0].lower()
+    counts = {}
+    for text in job_texts:
+        t = (text or "").lower()
+        for name, pat in SKILL_TERMS.items():
+            if re.search(r"(?<![a-z])(?:" + pat + r")", t) and not re.search(r"(?<![a-z])(?:" + pat + r")", known):
+                counts[name] = counts.get(name, 0) + 1
+    return sorted(counts.items(), key=lambda kv: -kv[1])[:top]

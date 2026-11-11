@@ -1,9 +1,11 @@
 anthropic
-pywebview
-pystray
-pillow
 keyring
-requests
+numpy
 openpyxl
-winotify
+pillow
 pyinstaller
+pystray
+pywebview
+qrcode
+requests
+winotify

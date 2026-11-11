@@ -1,68 +1,79 @@
-# AI Job Agent
+# CareerPilot AI
 
-A Windows desktop app that finds new entry- to mid-level AI jobs in the USA every 30 minutes, scores them
-against your resume, flags remote work and visa sponsorship, drafts cover letters and outreach notes, and
-tracks your applications. It runs in the background from the system tray.
+**Discover · Match · Connect · Apply.** A local-first Windows app that finds entry- to mid-level AI jobs in the
+USA every 30 minutes, ranks them against your resume, flags remote work and visa sponsorship, drafts cover letters
+and outreach notes, reminds you to follow up, and works on your phone over Wi-Fi. It runs from the system tray, and
+with Ollama the AI runs on your PC for free.
 
 ## Download
-1. Go to [Releases](../../releases/latest) and download `AI-Job-Agent-v1.1.0-windows.zip`.
-2. Unzip it anywhere, for example into `Documents`.
-3. Open the `AI Job Agent` folder and double-click **AI Job Agent.exe**.
+1. Go to [Releases](../../releases/latest) and download `CareerPilot-AI-v2.0.0-windows.zip`.
+2. Unzip it anywhere, open the `CareerPilot AI` folder and double-click **CareerPilot AI.exe**.
    Windows may show "Windows protected your PC" because the app isn't code-signed: click **More info → Run anyway**.
-4. In the app, open **Settings**: fill in **Your profile** (your resume summary) and pick an AI option.
-   For free, private scoring install [Ollama](https://ollama.com) and run `ollama pull gemma4`.
+3. Open **Settings**: fill in **Your profile** (your resume summary) and pick an AI option.
+4. For free, private AI install [Ollama](https://ollama.com), then run:
+   ```
+   ollama pull gemma4
+   ollama pull nomic-embed-text
+   ```
 
-Requires Windows 10 or 11 (64-bit) with the Microsoft Edge WebView2 runtime, which Windows 11 includes.
-The app stays in the system tray when you close the window; right-click the tray icon → Quit to stop it.
+Requires Windows 10 or 11 (64-bit) with the Microsoft Edge WebView2 runtime (included in Windows 11).
+Upgrading from AI Job Agent v1.x: your jobs, settings and keys carry over automatically.
 
 ## What it does
-- **Finds jobs** from many free sources: [AI Dev Jobs](https://aidevboard.com), [Remote OK](https://remoteok.com),
-  [Remotive](https://remotive.com), [Himalayas](https://himalayas.app), Hacker News "Who is hiring", 65 company
-  career boards (Greenhouse, Lever, Ashby), SmartRecruiters and Workable boards, and 25 big-employer Workday career
-  sites (NVIDIA, Salesforce, Adobe, Capital One, Visa and more).
-- **Optional free-key sources:** Adzuna, Jooble and JSearch (Google Jobs, which includes LinkedIn and Indeed postings).
-- **Your job-alert emails:** reads LinkedIn, Indeed, Glassdoor and ZipRecruiter alert emails from Gmail (read-only,
-  with an app password). LinkedIn via [Apify](https://apify.com) is also optional (paid per result).
-- **H-1B records:** shows each company's H-1B approvals from USCIS data (fiscal years 2022–2023).
-- **Filters** out jobs it has already seen, senior titles, and roles unrelated to AI or your background.
-- **Scores fit 1–10** with AI, plus sponsorship (Yes / Maybe / No) and work setup (Remote / Hybrid / On-site).
-- **Drafts** a cover letter, resume tweaks and gaps list for top matches, and short LinkedIn outreach notes.
-- **People to contact:** shows the hiring contact when a posting names one, and one-click LinkedIn and Google
-  searches for recruiters, hiring managers, directors and team members. Nothing is sent for you.
-- **Tracks** each job's status (New → Interested → Applied → Interview → Offer) with notes, and exports
-  `jobs_tracker.xlsx`. Edits made in Excel are read back in.
-- **Notifies** you when a new job scores at or above your alert level.
+- **Dashboard:** greeting, jobs indexed, best matches, new today, applications, top matches, follow-ups,
+  skills to learn and new jobs this week.
+- **Finds jobs** from free sources: Hacker News "Who is hiring", 25 big-employer Workday career sites (NVIDIA,
+  Salesforce, Adobe, Capital One, Visa…), 65 company boards (Greenhouse, Lever, Ashby), SmartRecruiters, Workable,
+  Himalayas, Remotive, AI Dev Jobs and Remote OK. Optional: Adzuna, Jooble, JSearch (Google Jobs, which includes
+  LinkedIn and Indeed postings), your LinkedIn/Indeed/Glassdoor/ZipRecruiter alert emails (Gmail, read-only), and
+  LinkedIn via Apify.
+- **Match %:** every job is compared with your resume by meaning (local embeddings, milliseconds per job), and
+  the best ones get a full AI fit score. The two are blended into one match %.
+- **Sponsorship intelligence:** the posting's wording, OPT/CPT acceptance, and each company's H-1B approvals from
+  USCIS (FY2022–23) combine into Sponsors / H-1B likely / Possible / Unknown / No.
+- **Contact finder:** the hiring contact when a posting names one, plus one-click LinkedIn and Google searches for
+  recruiters, hiring managers, directors and team members at each company. Nothing is sent for you.
+- **Application assistant:** cover letters with resume tweaks, LinkedIn outreach notes, and per-job skill-gap plans
+  (free courses, a portfolio project, interview prep).
+- **Learning hub:** the skills your best matches ask for most that your profile doesn't list yet.
+- **Tracker and reminders:** statuses (Interested → Applied → Interview → Offer), notes, applied and interview
+  dates; a nudge to follow up 7 days after applying and a reminder the day before an interview. Excel export.
+- **Phone access:** turn it on in Settings, scan the QR code with your phone on the same Wi-Fi, and add it to your
+  home screen. The phone gets the dashboard, matches, statuses, notes, contacts and drafts; settings, keys and
+  files stay on the PC.
 
 ## AI options
 | Option | Cost | Notes |
 |---|---|---|
-| Ollama on your PC | Free | Private, no key. Install [Ollama](https://ollama.com) and pull a model, e.g. `ollama pull gemma4`. |
+| Ollama on your PC | Free | Private, no key. `gemma4` for scoring and writing, `nomic-embed-text` for match %. |
 | Google Gemini | Free tier | Key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey). Daily limits apply. |
 | Claude | Paid | Key from [console.anthropic.com](https://console.anthropic.com). Best quality. |
 | Keyword matching | Free | Used automatically when no AI is available. |
 
-"Auto" tries Ollama, then Gemini, then Claude. Keys are stored in Windows Credential Manager, never in files.
+Keys are stored in Windows Credential Manager, never in files.
 
-## Build and install
+## Build from source
 ```bash
 python -m venv %LOCALAPPDATA%\AIJobAgent-build\venv
 %LOCALAPPDATA%\AIJobAgent-build\venv\Scripts\pip install -r requirements.txt
 %LOCALAPPDATA%\AIJobAgent-build\venv\Scripts\python build.py
 ```
-This installs to `%LOCALAPPDATA%\Programs\AI Job Agent` and adds Desktop and Start-menu shortcuts.
-To run from source instead: `python main.py`.
+This installs to `%LOCALAPPDATA%\Programs\CareerPilot AI` with Desktop and Start-menu shortcuts. Run from source
+with `python main.py`.
 
 ## Your data
-Everything personal lives in `Documents\AI Job Agent` (tracker, profile, cover letters, run log) and is not
-part of this repository. Start from [profile.example.md](profile.example.md) for your profile.
+Everything personal lives in `Documents\AI Job Agent` (tracker, profile, cover letters, run log, embeddings) and is
+not part of this repository. Start from [profile.example.md](profile.example.md).
 
 ## Layout
 - `main.py`: entry point
-- `jobagent/app.py`: window, tray icon, scheduler and the API the UI calls
-- `jobagent/runner.py`: one run: fetch, filter, score, track, draft, notify
-- `jobagent/sources.py`: job sources
-- `jobagent/ai.py`: Claude, Gemini, Ollama and keyword scoring
-- `jobagent/tracker.py`: storage and Excel export
-- `jobagent/rules.py`: keyword rules for sponsorship, remote work, seniority and relevance
+- `jobagent/app.py`: window, tray, scheduler and the API the interface calls
+- `jobagent/runner.py`: one run: fetch, filter, match, score, track, draft, remind
+- `jobagent/match.py`: meaning-based matching with local embeddings
+- `jobagent/sources.py`, `more_sources.py`, `email_alerts.py`: job sources
+- `jobagent/ai.py`: Claude, Gemini, Ollama and keyword scoring; drafts, outreach and skill-gap plans
+- `jobagent/rules.py`: sponsorship, OPT/CPT, remote, seniority, relevance, H-1B records, skill gaps
+- `jobagent/tracker.py`: storage, follow-ups and Excel export
+- `jobagent/remote.py`: phone access over Wi-Fi
 - `jobagent/ui/index.html`: the interface
 - `build.py`: PyInstaller build and install

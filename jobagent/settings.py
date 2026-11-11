@@ -5,7 +5,8 @@ import os
 import keyring
 
 APP_NAME = "AI Job Agent"
-APP_VERSION = "1.1.0"
+DISPLAY_NAME = "CareerPilot AI"  # APP_NAME stays: it locates your existing settings and saved keys
+APP_VERSION = "2.0.0"
 CONFIG_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), APP_NAME)
 CONFIG_FILE = os.path.join(CONFIG_DIR, "settings.json")
 DEFAULT_DATA_DIR = os.path.join(os.path.expanduser("~"), "OneDrive", "Documents", APP_NAME)
@@ -33,6 +34,7 @@ DEFAULTS = {
     "workday_sites": [],
     "sources_off": [],
     "gmail_address": "",
+    "phone_access": False,
     "alert_threshold": 8,
     "max_drafts_per_run": 3,
     "needs_sponsorship": True,

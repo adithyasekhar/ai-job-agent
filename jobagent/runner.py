@@ -4,7 +4,7 @@ import os
 import re
 import threading
 
-from . import ai, email_alerts, more_sources, rules, settings as cfg, sources
+from . import ai, email_alerts, match, more_sources, rules, settings as cfg, sources
 from .tracker import Store, outlook
 
 LOCK_STALE_MIN = 90
@@ -169,31 +169,36 @@ class Runner:
         self.log(f"{len(items)} jobs fetched → {len(new)} new matching jobs (skipped {dropped['seen']} already seen, "
                  f"{dropped['senior']} senior, {dropped['not_relevant']} not relevant)")
 
-        # Local models are slow, so cap AI scoring per run; the most promising jobs (by keywords) go first
-        # and the rest are scored in later runs.
+        # Meaning-based ranking (fast, local) decides which jobs the slower AI scores first.
+        profile = store.profile()
+        sem = self._semantic(store, new, profile)
+        for j in new:
+            if j["id"] not in sem:  # no embedding model: fall back to keywords
+                sem[j["id"]] = 10 * ai.keyword_score(dict(j, sponsorship=j["hint_sponsorship"]), j["description"],
+                                                     s["needs_sponsorship"])["fit"]
         p = self.provider(s)
         cap = 40 if (p and p.kind == "ollama") else 300
-        for j in new:
-            j["_kw"] = ai.keyword_score(dict(j, sponsorship=j["hint_sponsorship"]), j["description"],
-                                        s["needs_sponsorship"])["fit"]
-        ranked = sorted(new, key=lambda j: -j["_kw"])
-        judgments = self._score(s, ranked[:cap], store.profile()) if p else self._keyword(s, new)
+        ranked = sorted(new, key=lambda j: -sem.get(j["id"], 0))
+        judgments = self._score(s, ranked[:cap], profile) if p else self._keyword(s, new)
         if p and len(ranked) > cap:
-            self.log(f"{len(ranked) - cap} more jobs will be AI-scored in the next runs")
+            self.log(f"{len(ranked) - cap} more jobs will be AI-scored in the next runs (best matches first)")
         added = store.add_jobs(new, judgments)
 
-        # Use any spare capacity on older jobs that were never scored.
+        # Use any spare capacity on older unscored jobs, best semantic match first.
         spare = cap - min(len(ranked), cap)
         if p and spare > 0 and not self._stop:
             descs = store.descriptions()
-            backlog = [dict(r, description=descs.get(r["id"], "")) for r in store.jobs()
-                       if r.get("fit") in (None, "") and r["id"] in descs][:spare]
+            all_sem = store.semantic_scores()
+            backlog = sorted([dict(r, description=descs.get(r["id"], "")) for r in store.jobs()
+                              if r.get("fit") in (None, "") and r["id"] in descs],
+                             key=lambda r: -(all_sem.get(r["id"]) or 0))[:spare]
             if backlog:
                 self.log(f"Scoring {len(backlog)} older unscored jobs")
                 try:
-                    store.apply_scores(ai.score_jobs(p, store.profile(), backlog, s["needs_sponsorship"], self.log))
+                    store.apply_scores(ai.score_jobs(p, profile, backlog, s["needs_sponsorship"], self.log))
                 except ai.AIError as e:
                     self.log(f"Backlog scoring stopped: {e}")
+        store.set_semantic(sem)  # refresh match % (semantic + AI fit) for every job
         if (added or spare) and not store.render_xlsx():
             self.log("jobs_tracker.xlsx is open in Excel, so it will update next time")
 
@@ -205,6 +210,7 @@ class Runner:
             names = ", ".join(f"{r['company']}: {r['title'][:40]}" for r in top[:3])
             self.notify(f"{len(top)} new job{'s' if len(top) > 1 else ''} scored {threshold}+",
                         names + (f" · {drafts} cover letter{'s' if drafts != 1 else ''} drafted" if drafts else ""))
+        self._remind(store, s)
         note = "; ".join(errors)[:150] or f"{drafts} drafts"
         store.log_run("ok" if not errors else "partial", len(items), len(added), len(top),
                       f"{cost:.2f}" if cost else "", note)
@@ -214,6 +220,23 @@ class Runner:
         return self.last_summary
 
     # ------------------------------------------------------------ scoring
+    def _semantic(self, store, new, profile):
+        """Embed new (and any not-yet-embedded) jobs; return {id: semantic match %} for every job."""
+        if not match.available():
+            self.log("Embedding model not installed in Ollama (nomic-embed-text): ranking by keywords")
+            return {}
+        try:
+            m = match.Matcher(store)
+            descs = store.descriptions()
+            todo = [j for j in store.jobs() if j["id"] not in set(m.ids)][:300] + new
+            n = m.ensure_jobs(todo, {**descs, **{j["id"]: j.get("description", "") for j in new}})
+            if n:
+                self.log(f"Embedded {n} jobs for meaning-based matching")
+            return m.scores(profile)
+        except Exception as e:  # noqa: BLE001 - matching is an optimisation; never fail the run over it
+            self.log(f"Meaning-based matching skipped: {e}")
+            return {}
+
     def _score(self, s, jobs, profile):
         if not jobs:
             return {}
@@ -280,6 +303,39 @@ class Runner:
                 raise ai.AIError("No AI available. Start Ollama, or add a Gemini or Anthropic key in Settings.")
             rel = self._write_draft(self.store(), p, job_id)
             return f"Cover letter saved: {os.path.basename(rel)}"
+        return self._exclusive(go)
+
+    def _remind(self, store, s):
+        """Notify once per application that needs a follow-up, and once per upcoming interview."""
+        from .tracker import follow_ups
+        due, interviews = follow_ups(store.jobs())
+        if not s.get("notifications", True):
+            return
+        fresh_due = [r for r in due if not r.get("follow_up_notified")]
+        if fresh_due:
+            names = ", ".join(f"{r['company']} ({r['days_since']} days)" for r in fresh_due[:3])
+            self.notify(f"Time to follow up on {len(fresh_due)} application{'s' if len(fresh_due) > 1 else ''}", names)
+            for r in fresh_due:
+                store.update_job(r["id"], follow_up_notified=dt.date.today().isoformat())
+        soon = [r for r in interviews if r["days_until"] <= 1 and r.get("interview_notified") != r.get("interview_on")]
+        for r in soon:
+            when = "today" if r["days_until"] == 0 else "tomorrow"
+            self.notify(f"Interview {when}: {r['company']}", r["title"])
+            store.update_job(r["id"], interview_notified=r.get("interview_on"))
+
+    def write_gap_plan(self, job_id):
+        def go():
+            p = self.provider()
+            if not p:
+                raise ai.AIError("No AI available. Start Ollama, or add a Gemini or Anthropic key in Settings.")
+            store = self.store()
+            job = next((r for r in store.jobs() if r["id"] == job_id), None)
+            if not job:
+                raise ai.AIError("Job not found.")
+            self.log(f"Writing a skill-gap plan with {p.label} for {job['title']}")
+            store.update_job(job_id, gap_plan=ai.write_gap_plan(p, store.profile(), job,
+                                                                 store.descriptions().get(job_id, "")))
+            return "Skill-gap plan ready"
         return self._exclusive(go)
 
     def write_outreach(self, job_id):

@@ -105,7 +105,8 @@ class Store:
 
     # ------------------------------------------------------------ edits
     def update_job(self, job_id, **fields):
-        allowed = {"status", "notes", "applied_on", "draft", "outreach"}
+        allowed = {"status", "notes", "applied_on", "draft", "outreach", "interview_on", "follow_up_done",
+                   "gap_plan", "follow_up_notified", "interview_notified"}
         with _lock:
             data = self.jobs()
             for r in data:
@@ -204,6 +205,7 @@ class Store:
                     "hint_sponsorship": sp, "hint_evidence": ev,
                     "known_filer": "Yes" if rules.known_filer(company) else "",
                     "h1b": rules.h1b_label(company),
+                    "opt": rules.opt_status(desc),
                     "poster_name": j.get("posterFullName") or "", "poster_url": j.get("posterProfileUrl") or "",
                     "description": trimmed,
                 })
@@ -226,6 +228,7 @@ class Store:
                                              "salary", "type", "level", "url", "known_filer")}
                 rec["poster_name"], rec["poster_url"] = base.get("poster_name", ""), base.get("poster_url", "")
                 rec["h1b"] = base.get("h1b", "")
+                rec["opt"] = base.get("opt", "")
                 rec.update({
                     "fit": jd.get("fit"), "fit_reason": jd.get("fit_reason", "") or ("" if jd else "Not scored yet"),
                     "work_setup": jd.get("work_setup") or base["hint_work_setup"],
@@ -253,6 +256,21 @@ class Store:
                     n += 1
             self.save_jobs(data)
             return n
+
+    # ------------------------------------------------------------ semantic match
+    def semantic_scores(self):
+        return {r["id"]: r.get("semantic") for r in self.jobs()}
+
+    def set_semantic(self, sem):
+        """Store semantic scores and refresh each job's blended match %."""
+        from .match import blended
+        with _lock:
+            data = self.jobs()
+            for r in data:
+                if r["id"] in sem:
+                    r["semantic"] = sem[r["id"]]
+                r["match"] = blended(r.get("fit"), r.get("semantic"))
+            self.save_jobs(data)
 
     # ------------------------------------------------------------ run log
     def log_run(self, result, scraped="", new="", top="", cost="", note=""):
@@ -351,11 +369,41 @@ class Store:
 
 
 def outlook(r):
+    """Sponsorship outlook from the posting's wording plus the company's USCIS H-1B record:
+    Good (posting says yes) > Likely (big sponsor) > Possible > Unknown; No when the posting rules it out."""
     sp = r.get("sponsorship", "")
     if sp == "No":
         return "No"
     if sp == "Yes":
         return "Good"
-    if sp == "Maybe" or r.get("known_filer") == "Yes" or rules.known_filer(r.get("company", "")):
+    rec = rules.h1b_record(r.get("company", ""))
+    n = sum(rec) if rec else 0
+    if sp == "Maybe":
+        return "Good" if n >= 50 else "Possible"
+    if n >= 100:
+        return "Likely"
+    if n >= 5 or r.get("known_filer") == "Yes":
         return "Possible"
     return "Unknown"
+
+
+def follow_ups(jobs, today=None):
+    """Applications that need a nudge, and interviews coming up."""
+    today = today or dt.date.today()
+    due, interviews = [], []
+    for r in jobs:
+        if r.get("status") == "Applied" and r.get("applied_on") and not r.get("follow_up_done"):
+            try:
+                days = (today - dt.date.fromisoformat(r["applied_on"][:10])).days
+            except ValueError:
+                continue
+            if days >= 7:
+                due.append(dict(r, days_since=days))
+        if r.get("interview_on"):
+            try:
+                d = (dt.date.fromisoformat(r["interview_on"][:10]) - today).days
+            except ValueError:
+                continue
+            if 0 <= d <= 7:
+                interviews.append(dict(r, days_until=d))
+    return sorted(due, key=lambda r: -r["days_since"]), sorted(interviews, key=lambda r: r["days_until"])

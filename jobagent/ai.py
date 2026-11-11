@@ -411,6 +411,36 @@ def write_outreach(provider, profile, job, description):
                                          description=(description or job.get("fit_reason", ""))[:2500]))
 
 
+GAP_PLAN = """Make a short, practical skill-gap plan for this candidate and this job, using only facts in
+their profile. Return Markdown with:
+
+### Skills you already bring
+(3 bullets matched to the posting)
+
+### Gaps to close
+For each important skill the posting needs that the profile doesn't show (at most 4): the skill, why this job
+needs it, and the fastest free way to learn it (a well-known free course, official docs or tutorial: name it, no
+made-up links), with a realistic time estimate.
+
+### One portfolio project
+A small project (1-2 weekends) that shows the missing skills AND uses the candidate's existing background.
+
+### Interview prep
+3 questions they're likely to get, each with one line on how to answer from their real experience.
+
+<job_posting>
+Title: {title}
+Company: {company}
+{description}
+</job_posting>"""
+
+
+def write_gap_plan(provider, profile, job, description):
+    return provider.text(DRAFT_SYSTEM.replace("{profile}", profile.strip() or "(no profile)"),
+                         GAP_PLAN.format(title=job["title"], company=job["company"],
+                                         description=(description or job.get("fit_reason", ""))[:3500]))
+
+
 def test_key(api_key, model):
     try:
         resp = _client(api_key).messages.create(

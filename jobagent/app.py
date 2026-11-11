@@ -26,7 +26,7 @@ def resource(*parts):
 def notify(title, msg):
     try:
         from winotify import Notification
-        n = Notification(app_id=cfg.APP_NAME, title=title, msg=msg[:250], icon=resource("assets", "icon.png"))
+        n = Notification(app_id=cfg.DISPLAY_NAME, title=title, msg=msg[:250], icon=resource("assets", "icon.png"))
         n.show()
     except Exception:
         pass
@@ -34,7 +34,7 @@ def notify(title, msg):
 
 # ---------------------------------------------------------------- start with Windows
 def startup_shortcut():
-    return os.path.join(os.environ["APPDATA"], r"Microsoft\Windows\Start Menu\Programs\Startup", "AI Job Agent.lnk")
+    return os.path.join(os.environ["APPDATA"], r"Microsoft\Windows\Start Menu\Programs\Startup", "CareerPilot AI.lnk")
 
 
 def set_autostart(enabled):
@@ -62,6 +62,7 @@ class Api:
         self._task = ""          # current background action label
         self._task_result = ""
         self._ai_cache = (0, "")
+        self._phone = None  # PhoneServer, set in main()
 
     # ---- helpers
     def _store(self):
@@ -123,6 +124,10 @@ class Api:
             r["known_filer"] = "Yes" if rules.known_filer(r.get("company", "")) else r.get("known_filer", "")
             r["outlook"] = outlook(r)
             r["has_desc"] = r["id"] in descs
+            if "opt" not in r and r["has_desc"]:
+                r["opt"] = rules.opt_status(descs[r["id"]])
+            if r.get("match") in (None, ""):
+                r["match"] = int(r["fit"]) * 10 if isinstance(r.get("fit"), int) else None
             out.append(r)
         return out
 
@@ -148,6 +153,45 @@ class Api:
 
     def write_draft(self, job_id):
         return self._bg("Cover letter", lambda: self._runner.write_draft(job_id))
+
+    def write_gap_plan(self, job_id):
+        return self._bg("Skill-gap plan", lambda: self._runner.write_gap_plan(job_id))
+
+    def get_dashboard(self):
+        """Numbers and lists for the home screen."""
+        from .tracker import follow_ups
+        store = self._store()
+        jobs = store.jobs()
+        today = dt.date.today().isoformat()
+        active = [r for r in jobs if r.get("status") not in ("Rejected", "Skip")]
+        best = sorted([r for r in active if (r.get("match") or 0) >= 60 or (r.get("fit") or 0) >= 7],
+                      key=lambda r: -((r.get("match") or 0) + (r.get("fit") or 0)))
+        for r in best:
+            r["outlook"] = outlook(r)
+            r["h1b"] = r.get("h1b") or rules.h1b_label(r.get("company", ""))
+        due, interviews = follow_ups(jobs)
+        descs = store.descriptions()
+        gaps = rules.skill_gaps(store.profile(), [descs.get(r["id"], "") for r in best[:60]])
+        week = [0] * 7
+        for r in jobs:
+            try:
+                d = (dt.date.today() - dt.date.fromisoformat((r.get("found") or "")[:10])).days
+            except ValueError:
+                continue
+            if 0 <= d < 7:
+                week[6 - d] += 1
+        return {
+            "name": next((ln.split("**")[1].split(":")[0] for ln in store.profile().splitlines()
+                          if ln.startswith("**") and "**" in ln[2:]), ""),
+            "total": len(jobs), "best": len(best),
+            "new_today": sum(1 for r in jobs if (r.get("found") or "").startswith(today)),
+            "applied": sum(1 for r in jobs if r.get("status") in ("Applied", "Interview", "Offer")),
+            "interviewing": sum(1 for r in jobs if r.get("status") in ("Interview", "Offer")),
+            "top": best[:8], "follow_ups": due[:6], "interviews": interviews[:6], "gaps": gaps[:8],
+            "week": week, "sources": dict(sorted(
+                ((src, sum(1 for r in jobs if r.get("source") == src)) for src in {r.get("source") for r in jobs}),
+                key=lambda kv: -kv[1])[:8]),
+        }
 
     def write_outreach(self, job_id):
         return self._bg("Outreach notes", lambda: self._runner.write_outreach(job_id))
@@ -310,6 +354,32 @@ class Api:
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "message": f"Couldn't reach Apify: {e}"}
 
+    # ---- phone access
+    def get_phone_info(self):
+        from . import remote
+        on = bool(self._phone and self._phone.running)
+        info = {"enabled": cfg.load().get("phone_access", False), "running": on}
+        if on:
+            url = remote.pairing_url()
+            info.update(url=url, qr=remote.qr_data_uri(url), ip=remote.lan_ip(), port=remote.PORT)
+        return info
+
+    def set_phone_access(self, enabled):
+        s = cfg.load()
+        s["phone_access"] = bool(enabled)
+        cfg.save(s)
+        if self._phone:
+            if enabled and not self._phone.start():
+                return {"ok": False, "message": "Couldn't open port 8740 (is another program using it?)."}
+            if not enabled:
+                self._phone.stop()
+        return {"ok": True, **self.get_phone_info()}
+
+    def reset_phone_pairing(self):
+        from . import remote
+        remote.reset_token()
+        return self.get_phone_info()
+
     def set_schedule(self, enabled):
         s = cfg.load()
         s["schedule_enabled"] = bool(enabled)
@@ -365,13 +435,13 @@ def start_tray(api, quit_event):
             api._window.destroy()
 
     menu = pystray.Menu(
-        pystray.MenuItem("Open AI Job Agent", show, default=True),
+        pystray.MenuItem("Open CareerPilot AI", show, default=True),
         pystray.MenuItem("Run now", run),
         pystray.MenuItem("Automatic runs", toggle, checked=lambda item: cfg.load()["schedule_enabled"]),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit", quit_app),
     )
-    icon = pystray.Icon("AIJobAgent", Image.open(resource("assets", "icon.png")), "AI Job Agent", menu)
+    icon = pystray.Icon("AIJobAgent", Image.open(resource("assets", "icon.png")), "CareerPilot AI", menu)
     icon.run_detached()
     return icon
 
@@ -415,7 +485,7 @@ def main():
     api = Api()
     quit_event = threading.Event()
     window = webview.create_window(
-        "AI Job Agent", url=resource("ui", "index.html"), js_api=api, width=1320, height=860,
+        "CareerPilot AI", url=resource("ui", "index.html"), js_api=api, width=1320, height=860,
         min_size=(980, 640), hidden=minimized, background_color="#0f1115")
     api._window = window
     told = {"tray": False}
@@ -426,11 +496,15 @@ def main():
         threading.Thread(target=window.hide, daemon=True).start()
         if not told["tray"]:
             told["tray"] = True
-            notify("AI Job Agent is still running", "It keeps checking for jobs from the system tray. "
+            notify("CareerPilot AI is still running", "It keeps checking for jobs from the system tray. "
                                                      "Right-click the tray icon and choose Quit to stop it.")
         return False
 
     window.events.closing += on_closing
+    from .remote import PhoneServer
+    api._phone = PhoneServer(api, resource("ui"), resource("assets"))
+    if cfg.load().get("phone_access"):
+        api._phone.start()
     tray = start_tray(api, quit_event)
     threading.Thread(target=scheduler, args=(api, quit_event), daemon=True).start()
     threading.Thread(target=listen_for_show, args=(api, quit_event), daemon=True).start()
